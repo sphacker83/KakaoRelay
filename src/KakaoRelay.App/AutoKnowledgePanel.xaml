@@ -3,8 +3,8 @@
   <Grid Margin="12">
     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="120" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
     <StackPanel>
-      <TextBlock Text="대화를 지식 노트로 자동 정리" FontWeight="SemiBold" />
-      <TextBlock Text="매 주기마다 마지막 처리 위치부터 최근 대화까지 확인합니다. 잡담은 생략하고 기존 노트와 중복·충돌을 비교해 지식·결정·할 일을 저장합니다. 앱이 켜져 있어야 합니다." TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,8" />
+      <TextBlock Text="프로젝트 · 업무 지식 · 할 일 자동 정리" FontWeight="SemiBold" />
+      <TextBlock Text="새 대화를 분류하고 현재 노트를 갱신합니다. 근거와 변경 이력은 따로 보관합니다." TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,8" />
       <CheckBox Content="대화 자동 정리 사용" IsChecked="{Binding Enabled}" Margin="0,4,0,10" />
     </StackPanel>
     <DockPanel Grid.Row="1" Margin="0,0,0,8">
@@ -17,7 +17,7 @@
     </ListBox>
     <StackPanel Grid.Row="3" Margin="0,10,0,0">
       <CheckBox Content="확인된 내용은 지식으로 바로 저장" IsChecked="{Binding AutoSave}" />
-      <TextBlock Text="해제하면 전부 검토필요 폴더에 저장합니다. 추측·충돌하는 내용은 항상 검토 대상으로 분리하고 봇 검색에서 제외합니다. 봇 발신 계정의 모든 메시지와 첨부파일은 제외합니다." FontSize="10" Foreground="{StaticResource Muted}" Margin="0,6,0,10" />
+      <TextBlock Text="명시된 변경은 반영하고, 불확실한 충돌은 검토함에 보관합니다. 해제하면 모두 검토 대상으로 저장합니다." TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,6,0,10" />
       <WrapPanel>
         <Button Content="설정 적용" Click="Apply_Click" IsEnabled="{Binding CanConfigure}" Padding="10,7" Margin="0,0,6,6" Background="#087E83" Foreground="White" />
         <Button Content="지금 정리" Click="Run_Click" IsEnabled="{Binding CanRun}" Padding="10,7" Margin="0,0,6,6" />

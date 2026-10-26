@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "KakaoRelay Local Gateway",
-    "version": "0.7.6",
+    "version": "0.10.0",
     "description": "인증된 로컬 Windows 게이트웨이. 메시지 전송, SQLCipher 4 로컬 대화 읽기, CLI AI 분석·페르소나 설정."
   },
   "security": [
@@ -556,6 +556,19 @@
         }
       }
     },
+    "/v1/ai/delegations": {
+      "get": {
+        "operationId": "getAiDelegations",
+        "summary": "Grok 백그라운드 작업 이력과 결과 조회",
+        "responses": {
+          "200": {
+            "description": "로컬 작업 이력. 중단·불확실 작업은 자동 재시도하지 않습니다.",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/DelegationJob" } } } }
+          },
+          "401": { "description": "인증 필요" }
+        }
+      }
+    },
     "/v1/ai/providers": {
       "get": {
         "operationId": "getAiProviders",
@@ -1081,6 +1094,15 @@
           }
         }
       },
+      "SummaryRoom": {
+        "type": "object",
+        "required": ["profile", "id", "title"],
+        "properties": {
+          "profile": { "type": "string", "maxLength": 200 },
+          "id": { "type": "string", "maxLength": 200 },
+          "title": { "type": "string", "maxLength": 500 }
+        }
+      },
       "AiSettings": {
         "type": "object",
         "required": [
@@ -1091,6 +1113,23 @@
           "providers"
         ],
         "properties": {
+          "summaryForwards": {
+            "type": "array",
+            "description": "Windows 앱 실행 중 주기별 신규 내용 정리·전달 규칙. 전체 설정을 GET 후 수정해 PUT하세요.",
+            "items": {
+              "type": "object",
+              "required": ["id", "enabled", "intervalMinutes", "sources", "destination"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-fA-F0-9]{32}$", "description": "규칙 ID. 재활성화하거나 기준을 초기화할 때 새 UUID N 형식을 사용합니다." },
+                "enabled": { "type": "boolean", "default": false },
+                "intervalMinutes": { "type": "integer", "minimum": 1, "maximum": 1440, "default": 30 },
+                "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/SummaryRoom" } },
+                "destination": { "$ref": "#/components/schemas/SummaryRoom" }
+              }
+            }
+          },
+          "grokDelegationEnabled": { "type": "boolean", "default": false, "description": "자동답장에서 Codex 대화와 Grok 백그라운드 위임을 사용합니다." },
+          "grokTimeoutSeconds": { "type": "integer", "minimum": 10, "maximum": 1800, "default": 600 },
           "provider": {
             "enum": [
               "auto",
@@ -1202,6 +1241,23 @@
           }
         }
       },
+      "GrokTask": {
+        "type": "object",
+        "properties": { "task": { "type": "string" }, "reason": { "type": "string" } },
+        "required": ["task", "reason"]
+      },
+      "DelegationJob": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" }, "profile": { "type": "string" }, "roomId": { "type": "string" },
+          "roomTitle": { "type": "string" }, "messageId": { "type": "string" }, "request": { "type": "string" },
+          "task": { "$ref": "#/components/schemas/GrokTask" },
+          "status": { "enum": ["accepting", "queued", "running", "finalizing", "sending", "completed", "failed", "cancelled", "uncertain", "interrupted"] },
+          "result": { "type": ["string", "null"] }, "error": { "type": ["string", "null"] },
+          "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" },
+          "runId": { "type": "string" }
+        }
+      },
       "AiResult": {
         "type": "object",
         "required": [
@@ -1272,6 +1328,7 @@
             "type": ["string", "null"],
             "description": "CLI 이미지 생성에 전달할 시각적 설명. 자동답장은 text를 먼저 발송한 뒤 생성합니다."
           },
+          "delegation": { "description": "내부 자동답장용 위임 계획. 일반 생성 API에서는 null입니다.", "anyOf": [{ "$ref": "#/components/schemas/GrokTask" }, { "type": "null" }] },
           "knowledgeSources": {
             "type": "array",
             "description": "현재 답변 생성에 전달한 옵시디언 노트 발췌. 모델이 실제 인용한 출처와는 다를 수 있습니다.",

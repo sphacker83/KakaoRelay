@@ -81,7 +81,7 @@
             <StackPanel Grid.Column="1" Margin="0,0,8,0"><TextBlock Text="카카오 ID" FontSize="11"/><TextBox Text="{Binding SelfId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="내 카카오 사용자 ID" Margin="0,4,0,0"/></StackPanel>
             <Button Grid.Column="2" Content="방 새로고침" Click="Rooms_Click" VerticalAlignment="Bottom" Padding="10,8"/>
           </Grid>
-          <ListBox x:Name="BotRooms" Grid.Row="1" ItemsSource="{Binding Rooms}" SelectionMode="Multiple" IsEnabled="{Binding CanStartBots}" Margin="0,10" ItemTemplate="{StaticResource RoomWithPersona}" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="자동답장할 방을 최대 3개 선택하세요."/>
+          <ListBox x:Name="BotRooms" Grid.Row="1" ItemsSource="{Binding OpenBotRooms}" SelectionMode="Multiple" IsEnabled="{Binding CanStartBots}" Margin="0,10" ItemTemplate="{StaticResource RoomWithPersona}" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="열린 방 중 자동답장할 방을 선택하세요."/>
           <Grid Grid.Row="2" IsEnabled="{Binding CanBindBot}" ToolTip="{Binding BotBindingRoom.Title}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="132"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Margin="0,0,6,0"><TextBlock Text="봇" FontSize="11"/><ComboBox ItemsSource="{Binding Settings.Personas}" SelectedItem="{Binding RoomProfile}" DisplayMemberPath="Persona.Name" AutomationProperties.Name="연결할 봇" Padding="4,6" Margin="0,4,0,0"/></StackPanel>
@@ -140,6 +140,7 @@
       <TabItem Header="프로바이더">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="12" IsEnabled="{Binding Idle}">
+            <CheckBox Content="Codex 대화 · Grok 백그라운드 위임" IsChecked="{Binding Settings.GrokDelegationEnabled}" Margin="0,0,0,10" ToolTip="일상 대화는 Codex 모델이 담당하고, 어려운 요청만 Grok에 맡깁니다." />
             <TextBlock Text="먼저 사용할 프로바이더" />
             <ComboBox ItemsSource="{Binding ProviderChoices}" SelectedItem="{Binding Settings.Provider}" />
             <TextBlock Text="auto는 Codex부터, 직접 선택하면 해당 프로바이더부터 시작합니다. 실패하면 Codex → Grok → Claude → Codex 순환으로 최대 2회전 후 종료합니다. 사용 안 함은 건너뜁니다." FontSize="11" Foreground="{StaticResource Muted}" />
@@ -222,6 +223,9 @@
           </DockPanel>
           </StackPanel>
         </Grid>
+      </TabItem>
+      <TabItem Header="정리감시">
+        <local:SummaryForwardPanel x:Name="ForwardPanel"/>
       </TabItem>
     </TabControl>
     <Border Grid.Row="2" Background="#EAF5F5" Padding="10" Margin="0,9,0,0" CornerRadius="6">

@@ -19,7 +19,7 @@ public sealed class KnowledgeSettings
 public sealed record KnowledgeExcerpt(string Source, int Part, string Text);
 public sealed record KnowledgeSearch(List<KnowledgeExcerpt> Excerpts, int Notes, int Skipped, bool Limited);
 
-// Reads ordinary Markdown directly; Obsidian need not be running. No plugins or index files.
+// Reads Markdown directly; the managed catalog only identifies current notes and migrated archives.
 public static class ObsidianKnowledge
 {
     public const int MaxFiles = 2000, MaxFileBytes = 256 * 1024, MaxCharacters = 12000;
@@ -47,6 +47,7 @@ public static class ObsidianKnowledge
         if (!settings.Enabled) return new([], 0, 0, false);
         var root = Path.GetFullPath(settings.VaultPath);
         CheckDirectory(root);
+        var migrated = StructuredKnowledge.Load(root).Migrated;
         var terms = Terms(query.Length > 8000 ? query[..8000] : query);
         var best = new List<(KnowledgeExcerpt Excerpt, int Score)>();
         var directories = new Stack<string>(); directories.Push(root);
@@ -63,11 +64,13 @@ public static class ObsidianKnowledge
                     cancellation.ThrowIfCancellationRequested();
                     if (++entries > 10000) { limited = true; break; }
                     if (Path.GetFileName(path).StartsWith('.')) continue;
-                    if (directory == root && Path.GetFileName(path) == "검토필요") continue;
+                    if (directory == root && Path.GetFileName(path) is "검토필요" or "04-대화기록" or "05-변경이력") continue;
                     var attributes = File.GetAttributes(path);
                     if ((attributes & FileAttributes.ReparsePoint) != 0) { skipped++; continue; }
                     if ((attributes & FileAttributes.Directory) != 0) { directories.Push(path); continue; }
                     if (!Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase)) continue;
+                    var source = Path.GetRelativePath(root, path).Replace('\\', '/');
+                    if (migrated.Contains(source)) continue;
                     if (notes >= MaxFiles || characters >= 16_000_000) { limited = true; break; }
                     try
                     {
@@ -79,7 +82,6 @@ public static class ObsidianKnowledge
                         if (length > MaxFileBytes) { skipped++; continue; }
                         var text = new string(buffer, 0, length);
                         notes++; characters += length;
-                        var source = Path.GetRelativePath(root, path).Replace('\\', '/');
                         var titleTerms = Terms(source);
                         for (int offset = 0, part = 1; offset < text.Length; offset += ChunkSize, part++)
                         {
@@ -88,7 +90,7 @@ public static class ObsidianKnowledge
                             var score = terms.Sum(t => (titleTerms.Contains(t) ? 3 : 0) + (bodyTerms.Contains(t) ? 1 : 0));
                             if (score == 0) continue;
                             best.Add((new(source, part, chunk), score));
-                            best = best.OrderByDescending(x => x.Score).ThenBy(x => x.Excerpt.Source, StringComparer.Ordinal)
+                            best = best.OrderByDescending(x => StructuredKnowledge.Current(x.Excerpt.Source)).ThenByDescending(x => x.Score).ThenBy(x => x.Excerpt.Source, StringComparer.Ordinal)
                                 .ThenBy(x => x.Excerpt.Part).Take(6).ToList();
                         }
                     }

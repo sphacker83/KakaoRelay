@@ -27,6 +27,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool NotWorking => CanEdit;
     public bool CanEdit => !working && queuedSends == 0 && !shuttingDown;
     public void PrepareShutdown() { shuttingDown = true; ChatbotPanel.Stop(); KnowledgePanel.Stop(); ApiStatus = "작업 완료 후 종료 중"; RefreshAll(); }
+    public Task WaitForBotsAsync() => ChatbotPanel.WaitForBotsAsync();
     public bool ShowSendResult => compose.Submitted || currentReceipt is not null;
     public bool ShowObserveCurrent => currentReceipt is { Status: "needs-review", EnterPosted: true };
     public bool CanSend => CanEdit && targetReady && selectedConversation?.Selectable == true && !string.IsNullOrWhiteSpace(messageBody);
@@ -71,7 +72,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public MainWindow()
     {
         InitializeComponent(); DataContext = this;
-        Title = "KakaoRelay v0.7.6";
+        Title = "KakaoRelay v0.10.0";
         Loaded += (_, _) => RestoreFixedSize();
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(RestoreFixedSize);
         Loaded += async (_, _) => { LoadHistory(); await RefreshRoomsAsync(); };

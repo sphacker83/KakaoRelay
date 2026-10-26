@@ -4,7 +4,7 @@ using System.Text;
 
 namespace KakaoRelay.Core;
 
-public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<TestSendReceipt>> send, DailyReplyHistory? history = null)
+public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<TestSendReceipt>> send, DailyReplyHistory? history = null, string? delegationRoot = null)
 {
     private readonly DailyReplyHistory dailyReplies = history ?? new(DailyReplyHistory.DefaultRoot);
     public event Action<string>? StatusChanged;
@@ -22,12 +22,12 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
     private sealed class SessionProgress(Action<string> report) : IProgress<string> { public void Report(string value) => report(value); }
     private static string Identity(LocalRoom room, LocalMessage candidate) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{room.Profile}:{room.Id}:{candidate.Id}")))[..40];
 
-    public async Task SendReplyAsync(LocalRoom room, LocalMessage candidate, AiResult result, CancellationToken cancellation)
+    public async Task SendReplyAsync(LocalRoom room, LocalMessage candidate, AiResult result, CancellationToken cancellation, string phase = "")
     {
         cancellation.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(result.Text) || result.Text.Length > 8000)
-            throw new InvalidOperationException("자동 답변 길이가 유효하지 않아 중지했습니다.");
-        var identity = Identity(room, candidate);
+        if (string.IsNullOrWhiteSpace(result.Text))
+            throw new InvalidOperationException("자동 답변이 비어 있어 중지했습니다.");
+        var identity = Identity(room, candidate) + (phase.Length == 0 ? "" : "-" + phase);
         var day = dailyReplies.Today;
         if (result.ImageError is null && (result.ImagePrompt is not null || result.ImagePath is not null))
         {
@@ -77,6 +77,9 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
     public async Task RunAsync(LocalRoom room, string selfId, string trigger, CancellationToken cancellation)
     {
         if (!BigInteger.TryParse(selfId, out var self) || self <= 0) throw new ArgumentException("내 사용자 ID가 필요합니다.");
+        await using var jobs = new BackgroundDelegations(ai,
+            (r, m, result, phase, ct) => SendReplyAsync(r, m, result, ct, phase),
+            message => StatusChanged?.Invoke($"{room.Title} · {message}"), cancellation, delegationRoot);
         var settings = ai.Settings.Load(); var mode = settings.ReplyModeForRoom(room.Profile, room.Id);
         var baseline = await ai.Chats.ReadAsync(room.Profile, room.Id, 1, cancellation);
         var watermark = baseline.Messages.LastOrDefault()?.Id ?? "0";
@@ -108,13 +111,14 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
             {
             // Consume the trigger before generation; failures are not retried as new sends.
             StatusChanged?.Invoke($"{room.Title} 답변 생성 중 · 이번 묶음 {pending.Count}개 호출");
-            var result = await ai.GenerateAsync(new(room.Profile, room.Id, "reply", $"메시지 ID {candidate.Id}에만 답하라. 다른 호출은 별도로 처리된다. 호출 내용: {PromptJson.Serialize(candidate.Text)}") { TargetMessageId = candidate.Id }, cancellation, new SessionProgress(s => StatusChanged?.Invoke($"{room.Title} · {s}")), deferImages: true);
-            await SendReplyAsync(room, candidate, result, cancellation);
+            var result = await ai.GenerateAsync(new(room.Profile, room.Id, "reply", $"메시지 ID {candidate.Id}에만 답하라. 다른 호출은 별도로 처리된다. 호출 내용: {PromptJson.Serialize(candidate.Text)}") { TargetMessageId = candidate.Id }, cancellation, new SessionProgress(s => StatusChanged?.Invoke($"{room.Title} · {s}")), deferImages: true, allowDelegation: true);
+            if (result.Delegation is not null) await jobs.StartAsync(room, candidate, result);
+            else await SendReplyAsync(room, candidate, result, cancellation);
             StatusChanged?.Invoke($"{room.Title} · {result.Provider} 답변 전송 요청 처리 · 다음 호출 대기");
 
             }
             watermark = context.Messages.LastOrDefault()?.Id ?? watermark;
-            StatusChanged?.Invoke($"{room.Title} 대기 중 · 마지막 확인 {DateTime.Now:HH:mm:ss} · {mode} · {settings.PollSeconds}초 폴링");
+            StatusChanged?.Invoke($"{room.Title} 대기 중 · 마지막 확인 {DateTime.Now:HH:mm:ss} · {mode} · {settings.PollSeconds}초 폴링" + (jobs.Pending > 0 ? $" · Grok {jobs.Pending}건 진행 중" : ""));
         }
     }
 }

@@ -132,7 +132,7 @@ public sealed class RelayApi : IAsyncDisposable
             catch
             { context.Response.StatusCode = 500; await context.Response.WriteAsJsonAsync(new { code = "unknown_result", detail = "같은 requestId로 결과를 조회하세요. 새 ID로 자동 재전송하지 마세요." }); }
         });
-        app.MapGet("/v1/health", () => Results.Json(new { status = "ready", version = "0.7.6", application = "KakaoRelay" }));
+        app.MapGet("/v1/health", () => Results.Json(new { status = "ready", version = "0.10.0", application = "KakaoRelay" }));
         app.MapGet("/v1/capabilities", () => Results.Json(new
         {
             send = true, idempotency = "requestId", requiresOpenRoom = true, maxMessageCharacters = (int?)null,
@@ -157,6 +157,7 @@ public sealed class RelayApi : IAsyncDisposable
             app.MapGet("/v1/ai/settings", () => Results.Json(ai.Settings.Load()));
             app.MapPut("/v1/ai/settings", (AiSettings settings) => { ai.Settings.Save(settings); return Results.Ok(); });
             app.MapGet("/v1/ai/providers", () => Results.Json(CliAiRunner.Status(ai.Settings.Load())));
+            app.MapGet("/v1/ai/delegations", () => Results.Json(new DelegationJobStore().List()));
             app.MapPost("/v1/ai/generate", async (AiCommand command, CancellationToken ct) => Results.Json(await ai.GenerateAsync(command, ct)));
         }
         app.MapGet("/v1/requests", async () => Results.Json(await Task.Run(history)));
@@ -178,7 +179,7 @@ public sealed class RelayApi : IAsyncDisposable
         try
         {
             await app.StartAsync();
-            var connection = new ApiConnection(app.Urls.Single(), token, Environment.ProcessId, "0.7.6");
+            var connection = new ApiConnection(app.Urls.Single(), token, Environment.ProcessId, "0.10.0");
             Directory.CreateDirectory(Path.GetDirectoryName(discoveryPath)!);
             var temporary = discoveryPath + ".tmp";
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(connection, ReportStore.JsonOptions));

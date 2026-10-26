@@ -44,10 +44,13 @@ public sealed class AiSettings
     public string ReplyModeForRoom(string profile, string roomId) => RoomReplyModes.GetValueOrDefault(RoomKey(profile, roomId), ReplyMode);
     public List<string> SelectedBotRooms { get; set; } = [];
     public AutoKnowledgeSettings AutoKnowledge { get; set; } = new();
+    public List<SummaryForwardRule> SummaryForwards { get; set; } = [];
     public string? SelectedChatRoom { get; set; }
     public string Provider { get; set; } = "auto";
     public int ContextMessages { get; set; } = 100;
     public int TimeoutSeconds { get; set; } = 180;
+    public bool GrokDelegationEnabled { get; set; }
+    public int GrokTimeoutSeconds { get; set; } = 600;
     private BotPersona legacyPersona = new();
     // Keep old API/portable clients editing the first slot after migration as well.
     public BotPersona Persona { get => Personas is { Count: > 0 } ? Personas[0].Persona : legacyPersona; set { legacyPersona = value; if (Personas is { Count: > 0 }) Personas[0].Persona = value; } }
@@ -78,12 +81,17 @@ public sealed class AiSettings
     {
         if (AutoKnowledge is null) throw new ArgumentException("대화 자동 정리 설정을 확인하세요.");
         AutoKnowledge.Validate();
+        if (SummaryForwards is null || SummaryForwards.Any(r => r is null)
+            || SummaryForwards.Select(r => r.Id).Distinct().Count() != SummaryForwards.Count)
+            throw new ArgumentException("정리·전달 규칙을 확인하세요.");
+        foreach (var rule in SummaryForwards) rule.Validate();
         if (new[] { ImageGptModel, ImageGrokModel }.Any(m => m is null || !Regex.IsMatch(m, "\\A[a-zA-Z0-9._:/-]{1,150}\\z"))) throw new ArgumentException("이미지 CLI 모델 이름을 확인하세요.");
         if (PollSeconds is < 1 or > 300 || ReplyMode is not ("immediate" or "trigger" or "context")) throw new ArgumentException("폴링은 1~300초이며 답변 방식을 선택해야 합니다.");
         if (RoomReplyModes is null || RoomReplyModes.Values.Any(mode => mode is not ("immediate" or "trigger" or "context"))) throw new ArgumentException("채팅방별 답변 방식을 확인하세요.");
         if (SelectedBotRooms is null || SelfId is null || Trigger is null) throw new ArgumentException("자동 답장 설정을 확인하세요.");
         if (Provider != "auto" && !Order.Contains(Provider)) throw new ArgumentException("프로바이더를 확인하세요.");
         if (ContextMessages is < 1 or > 500 || TimeoutSeconds is < 10 or > 900) throw new ArgumentException("문맥은 1~500개, 제한 시간은 10~900초입니다.");
+        if (GrokTimeoutSeconds is < 10 or > 1800) throw new ArgumentException("Grok 작업 제한 시간은 10~1800초입니다.");
         if (Persona is null || Providers is null || Providers.Count != 3 || Providers.Any(p => p is null) || !Providers.Select(p => p.Id).Order().SequenceEqual(Order.Order())) throw new ArgumentException("AI 설정 형식이 올바르지 않습니다.");
         if (string.IsNullOrWhiteSpace(Persona.Name) || new[] { Persona.Name, Persona.Role, Persona.Tone, Persona.Style, Persona.Instructions }.Any(t => t is null || t.Length > 10000)) throw new ArgumentException("페르소나 이름과 지침을 확인하세요.");
         if (Personas is null || RoomPersonas is null) throw new ArgumentException("페르소나 목록을 확인하세요.");

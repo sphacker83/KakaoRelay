@@ -105,6 +105,7 @@ internal static class ApiChecks
         {
             using var client = new HttpClient { BaseAddress = new Uri(api.Connection.BaseUrl) };
             check((await client.GetAsync("/v1/local/rooms")).StatusCode == HttpStatusCode.Unauthorized, "Local conversation API requires the same bearer protection");
+            check((await client.GetAsync("/v1/ai/delegations")).StatusCode == HttpStatusCode.Unauthorized, "Background task history requires authentication");
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", api.Connection.Token);
             var capabilities = await client.GetFromJsonAsync<JsonElement>("/v1/capabilities");
             check(capabilities.GetProperty("recentMessages").GetProperty("supported").GetBoolean() && capabilities.GetProperty("aiChat").GetBoolean(), "Configured API advertises local reading and AI chat");
@@ -114,11 +115,13 @@ internal static class ApiChecks
             check(invalid.StatusCode == HttpStatusCode.BadRequest, "Message limit validation is exposed through HTTP");
             var aiSettings = await client.GetFromJsonAsync<AiSettings>("/v1/ai/settings");
             aiSettings!.Persona.Name = "API 봇";
+            aiSettings.GrokDelegationEnabled = true;
             check((await client.PutAsJsonAsync("/v1/ai/settings", aiSettings)).IsSuccessStatusCode && ai.Settings.Load().Persona.Name == "API 봇", "AI settings endpoint persists persona changes");
             var posts = fake.Posts;
             var response = await client.PostAsJsonAsync("/v1/ai/generate", new AiCommand(localRoom.Profile, localRoom.Id, "reply"));
             var answer = await response.Content.ReadFromJsonAsync<AiResult>();
-            check(response.IsSuccessStatusCode && answer?.Provider == "codex" && fake.Posts == posts, "AI generation returns a draft without sending to KakaoTalk");
+            check(response.IsSuccessStatusCode && answer?.Provider == "codex" && answer.Delegation is null && fake.Posts == posts, "AI generation returns a draft without sending or launching background delegation");
+            check((await client.GetAsync("/v1/ai/delegations")).IsSuccessStatusCode, "Authorized clients can read background task history");
             aiSettings.Provider = "bogus";
             check((await client.PutAsJsonAsync("/v1/ai/settings", aiSettings)).StatusCode == HttpStatusCode.BadRequest, "Invalid provider cannot overwrite saved settings");
         }

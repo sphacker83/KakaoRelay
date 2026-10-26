@@ -2,6 +2,17 @@ using KakaoRelay.Core;
 
 internal static class AutoReplyChecks
 {
+    private sealed class ManyRoomReader : IChatReader
+    {
+        public List<LocalRoom> Rooms = Enumerable.Range(1, 8).Select(i => new LocalRoom("fixture", i.ToString(), $"Fixture room {i}", true)).ToList();
+        public List<string> ReadIds = [];
+        public Task<List<LocalRoom>> RoomsAsync(CancellationToken cancellation = default) => Task.FromResult(Rooms.ToList());
+        public Task<ChatContext> ReadAsync(string profile, string roomId, int limit, CancellationToken cancellation = default)
+        {
+            ReadIds.Add(roomId);
+            return Task.FromResult(new ChatContext(Rooms.Single(r => r.Profile == profile && r.Id == roomId), [], DateTimeOffset.UtcNow));
+        }
+    }
     private sealed class Reader : IChatReader
     {
         public LocalRoom Room = new("test-profile", "1", "테스트 방", true);
@@ -23,6 +34,22 @@ internal static class AutoReplyChecks
     }
     public static async Task RunAsync(string root, Action<bool, string> check)
     {
+        var many = new ManyRoomReader();
+        var windows = many.Rooms.Select(r => new ConversationTarget(r.Title, 1, r.Id, false)).ToList();
+        check(AutoReplyReadiness.OpenRooms(many.Rooms, windows.Take(4).ToList()).SequenceEqual(many.Rooms.Take(4)),
+            "Auto-reply list contains only currently open rooms and retains more than three entries");
+        check(AutoReplyReadiness.OpenRooms(many.Rooms, []).Count == 0,
+            "Auto-reply list is empty when no sending windows are open");
+        check(AutoReplyReadiness.OpenRooms(many.Rooms, [windows[0] with { Ambiguous = true }, windows[1]]).SequenceEqual([many.Rooms[1]])
+            && AutoReplyReadiness.OpenRooms([many.Rooms[0], many.Rooms[0] with { Id = "duplicate" }], [windows[0]]).Count == 0,
+            "Ambiguous windows and duplicate local titles cannot enter the auto-reply list");
+        var prepared = await AutoReplyReadiness.PrepareAsync(many, many.Rooms, () => windows);
+        check(prepared.Selected.SequenceEqual(many.Rooms) && many.ReadIds.SequenceEqual(many.Rooms.Select(r => r.Id)),
+            "More than three auto-reply rooms are accepted and every selected room is checked without truncation");
+        try { await AutoReplyReadiness.PrepareAsync(many, [], () => windows); check(false, "Empty room selection"); }
+        catch (InvalidOperationException) { check(true, "Empty auto-reply room selection is still rejected"); }
+        try { await AutoReplyReadiness.PrepareAsync(many, many.Rooms, () => windows.Take(7).ToList()); check(false, "Missing eighth window"); }
+        catch (InvalidOperationException error) { check(error.Message.Contains(many.Rooms[7].Title), "Rooms beyond the old limit still require a valid sending window"); }
         var reader = new Reader(); var sent = new List<ApiSendCommand>();
         var history = new DailyReplyHistory(Path.Combine(root, "auto-reply-days"));
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));

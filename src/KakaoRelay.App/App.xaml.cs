@@ -108,6 +108,7 @@ public partial class App : Application
         exiting = true;
         main.PrepareShutdown();
         tray?.SetExiting();
+        await main.WaitForBotsAsync();
         // Stop admitting work, then let any active send persist its final receipt.
         while (startingApi || main.Working) await Task.Delay(100);
         if (api is { } running)

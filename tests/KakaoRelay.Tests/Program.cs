@@ -67,6 +67,27 @@ var checks = 0;
 void Check(bool condition, string description) { if (!condition) throw new Exception(description); checks++; Console.WriteLine($"PASS {description}"); }
 try
 {
+    if (args.Contains("--summary-checks"))
+    {
+        await SummaryForwardChecks.RunAsync(root, Check);
+        await AutoReplyChecks.RunAsync(root, Check);
+        Console.WriteLine($"All {checks} summary and room checks passed.");
+        return 0;
+    }
+    if (args.Contains("--delegation-checks"))
+    {
+        await DelegationChecks.RunAsync(root, Check);
+        Console.WriteLine($"All {checks} delegation checks passed.");
+        return 0;
+    }
+    if (args.Contains("--knowledge-checks"))
+    {
+        await KnowledgeChecks.RunAsync(root, Check);
+        await AutoKnowledgeChecks.RunAsync(root, Check);
+        await StructuredKnowledgeChecks.RunAsync(root, Check);
+        Console.WriteLine($"All {checks} knowledge checks passed.");
+        return 0;
+    }
     if (args.Contains("--chat-tools"))
     {
         await ChatToolChecks.RunAsync(root, Check);
@@ -122,8 +143,11 @@ try
     await PersonaChecks.RunAsync(root, Check);
     await KnowledgeChecks.RunAsync(root, Check);
     await AutoKnowledgeChecks.RunAsync(root, Check);
+    await StructuredKnowledgeChecks.RunAsync(root, Check);
     await ReplyModeChecks.RunAsync(root, Check);
     await AutoReplyChecks.RunAsync(root, Check);
+    await SummaryForwardChecks.RunAsync(root, Check);
+    await DelegationChecks.RunAsync(root, Check);
     CipherChecks.Run(Check);
     Console.WriteLine($"All {checks} checks passed.");
     return 0;

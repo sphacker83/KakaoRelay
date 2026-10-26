@@ -19,6 +19,7 @@ public static class KnowledgeDocuments
     {
         var root = Path.GetFullPath(vault);
         ObsidianKnowledge.CheckDirectory(root);
+        var migrated = StructuredKnowledge.Load(root).Migrated;
         var notes = new List<KnowledgeNote>();
         var pending = new Stack<string>(); pending.Push(root);
         int entries = 0, skipped = 0;
@@ -34,11 +35,13 @@ public static class KnowledgeDocuments
                     cancellation.ThrowIfCancellationRequested();
                     if (++entries > 10000) { limited = true; break; }
                     if (Path.GetFileName(path).StartsWith('.')) continue;
-                    if (directory == root && Path.GetFileName(path) == "검토필요") continue;
+                    if (directory == root && Path.GetFileName(path) is "검토필요" or "04-대화기록" or "05-변경이력") continue;
                     var attributes = File.GetAttributes(path);
                     if (attributes.HasFlag(FileAttributes.ReparsePoint)) { skipped++; continue; }
                     if (attributes.HasFlag(FileAttributes.Directory)) { pending.Push(path); continue; }
                     if (!Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase)) continue;
+                    var source = Path.GetRelativePath(root, path).Replace('\\', '/');
+                    if (StructuredKnowledge.Historical(source) || migrated.Contains(source)) continue;
                     if (notes.Count == ObsidianKnowledge.MaxFiles) { limited = true; break; }
                     var bytes = new FileInfo(path).Length;
                     if (bytes > ObsidianKnowledge.MaxFileBytes) { skipped++; continue; }

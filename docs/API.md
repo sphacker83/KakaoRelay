@@ -1,4 +1,4 @@
-# KakaoRelay Gateway API · v1 (앱 v0.7.6)
+# KakaoRelay Gateway API · v1 (앱 v0.10.0)
 
 ## 이미지 전송 · POST /v1/send-image
 
@@ -173,7 +173,16 @@ v0.6 Windows 앱은 `capabilities.recentMessages.supported=true`를 반환합니
 | GET /v1/ai/settings | 페르소나·프로바이더 설정 |
 | PUT /v1/ai/settings | 설정 전체 검증·저장 |
 | GET /v1/ai/providers | 설치된 CLI 경로·상태. 로그인 성공을 뜻하지 않음 |
+| GET /v1/ai/delegations | Grok 백그라운드 작업 이력·상태·결과 조회 |
 | POST /v1/ai/generate | 분석·답변·질문 응답. 카카오톡에 전송하지 않음 |
+
+설정 `grokDelegationEnabled=true`이면 Windows 자동답장의 대화 담당은 설정된 Codex 모델이고, 복잡한 요청을 별도 Grok 작업으로 위임할 수 있습니다. `grokTimeoutSeconds`는 작업별 제한 시간(기본 600초, 10~1800초)입니다. 일반 대화는 Grok을 기다리지 않습니다. 생성 API는 백그라운드 작업을 시작하지 않습니다.
+
+`summaryForwards`는 주기별 정리·전달 규칙 배열입니다. 각 규칙에 `id`(32자리 UUID N 형식), `enabled`, `intervalMinutes`(1~1440), `sources`(원본 방 배열), `destination`(수신방)을 지정합니다. 방 객체는 `{ "profile": "...", "id": "...", "title": "..." }`이며 원본은 로컬 기록을 읽을 수 있는 방이며 `selectedBotRooms`와 독립적입니다. GET으로 전체 설정을 읽어 필요한 필드만 수정한 뒤 PUT하세요.
+
+활성 규칙은 Windows 앱 실행 중 새 대화의 추가사항만 요약해 수신방으로 보냅니다. 최초 활성화는 현재 메시지를 기준으로 시작하고 수신방이 닫혀 있으면 다음 주기에 재확인합니다. 규칙 ID를 유지하면 처리 위치를 이어가고, 껐다 다시 켜며 새 기준으로 시작하려면 새 ID를 지정합니다. 발송 결과가 불확실한 요청은 자동 재전송하지 않습니다. UI에서는 **AI 챗봇 → 정리감시**에서 설정할 수 있습니다.
+
+`GET /v1/ai/delegations`는 작업별 `id`, `profile`, `roomId`, `roomTitle`, `messageId`, 원문 `request`, 위임 `task`(`task`, `reason`), `status`, `result`, `error`, `createdAt`, `updatedAt`, 앱 실행 식별자 `runId`를 반환합니다. 상태는 `accepting`, `queued`, `running`(실행 슬롯 대기 포함), `finalizing`, `sending`, `completed`, `failed`, `cancelled`, `uncertain`, `interrupted`입니다. `uncertain`은 발송 결과 확인이 필요한 상태이고 `interrupted`는 이전 앱 실행에서 끝나지 않은 작업입니다. 자동 재시도하지 않습니다. 이 이력은 대화와 결과를 포함하는 로컬 개인정보입니다.
 
 웹검색을 사용할 수 있으며 검색한 답변에는 출처 URL을 포함하도록 안내합니다. Windows에서 `reply`/`chat` 요청이 새 이미지 생성을 요구하면 생성 완료 후 검증된 `imagePath`와 그림 설명 `imagePrompt`가 반환됩니다. 해당 경로를 `POST /v1/send-image`로 보낼 수 있습니다. `imageError`가 있으면 생성 실패이며 `text`도 실패 안내로 대체됩니다. 자동답장은 별도로 설명 텍스트를 먼저 발송하고, 전송 결과가 확인된 뒤 CLI 이미지를 생성하여 보냅니다. `targetMessageId`를 지정하면 그 메시지를 현재 답변 대상으로 안내합니다.
 

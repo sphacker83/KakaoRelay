@@ -2,11 +2,18 @@ namespace KakaoRelay.Core;
 
 public static class AutoReplyReadiness
 {
+    public static List<LocalRoom> OpenRooms(IReadOnlyList<LocalRoom> rooms, IReadOnlyList<ConversationTarget> windows)
+    {
+        var uniqueTitles = rooms.GroupBy(r => r.Title).Where(g => g.Count() == 1).Select(g => g.Key).ToHashSet();
+        var openTitles = windows.GroupBy(w => w.Title).Where(g => g.Count() == 1 && g.Single().Selectable).Select(g => g.Key).ToHashSet();
+        return rooms.Where(r => uniqueTitles.Contains(r.Title) && openTitles.Contains(r.Title)).ToList();
+    }
+
     public static async Task<(List<LocalRoom> Rooms, List<LocalRoom> Selected)> PrepareAsync(
         IChatReader reader, IReadOnlyList<LocalRoom> selected, Func<List<ConversationTarget>> scan,
         CancellationToken cancellation = default)
     {
-        if (selected.Count is < 1 or > 3) throw new InvalidOperationException("자동 답장할 방을 1~3개 선택하세요.");
+        if (selected.Count == 0) throw new InvalidOperationException("자동 답장할 방을 선택하세요.");
         var rooms = await reader.RoomsAsync(cancellation);
         var ready = new List<LocalRoom>();
         foreach (var old in selected)

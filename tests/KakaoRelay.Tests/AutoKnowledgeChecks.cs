@@ -45,27 +45,27 @@ internal static class AutoKnowledgeChecks
         await service.TickAsync(settings);
         check(runner.Calls == 0, "A scheduled check waits for the configured interval");
         await service.TickAsync(settings, true);
-        var accepted = Directory.GetFiles(Path.Combine(vault, "자동정리"), "*.md");
+        var accepted = Directory.GetFiles(Path.Combine(vault, "02-업무지식"), "*.md");
         var reviews = Directory.GetFiles(Path.Combine(vault, "검토필요"), "*.md");
         check(accepted.Length == 1 && reviews.Length == 1 && File.ReadAllText(accepted[0]).Contains("메시지 2") && !runner.Prompt.Contains("BOT-SECRET") && !runner.Prompt.Contains("과거 대화"), "Only new human text is summarized; accepted notes preserve evidence while uncertain claims go to review");
         check((await ObsidianKnowledge.SearchAsync(settings.Personas[0].Knowledge, "회의 금요일")).Excerpts.Count == 0
-            && (await KnowledgeDocuments.ListAsync(vault)).Notes.Count == 1, "Review notes are excluded from bot search and the trusted library");
+            && (await KnowledgeDocuments.ListAsync(vault)).Notes.Count == 2, "Review notes are excluded from bot search and the trusted library");
         var restarted = new AutoKnowledgeService(reader, runner, state);
         await restarted.TickAsync(settings, true);
         check(runner.Calls == 1, "Restart resumes the persisted cursor without repeated summaries");
         reader.Messages.Add(Message(5, "휴가는 사흘 전에 신청합니다."));
         runner.Reply = () => Digest(Claim("휴가 신청", "휴가는 사흘 전에 신청합니다.", 5, "휴가는 사흘 전에 신청합니다."));
         await service.TickAsync(settings, true);
-        check(Directory.GetFiles(Path.Combine(vault, "자동정리"), "*.md").Length == 1 && status.Contains("중복 1건"), "Repeated knowledge is deduplicated across batches");
+        check(Directory.GetFiles(Path.Combine(vault, "02-업무지식"), "*.md").Length == 1 && status.Contains("중복 1건"), "Repeated knowledge is deduplicated across batches");
         reader.Messages.Add(Message(6, "휴가는 닷새 전에 신청합니다."));
         runner.Reply = () => Digest(Claim("휴가 신청", "휴가는 닷새 전에 신청합니다.", 6, "휴가는 닷새 전에 신청합니다."));
         await service.TickAsync(settings, true);
-        check(Directory.GetFiles(Path.Combine(vault, "자동정리"), "*.md").Length == 1 && Directory.GetFiles(Path.Combine(vault, "검토필요"), "*.md").Length == 2,
+        check(Directory.GetFiles(Path.Combine(vault, "02-업무지식"), "*.md").Length == 1 && Directory.GetFiles(Path.Combine(vault, "검토필요"), "*.md").Length == 2,
             "Conflicting content under an existing topic is held for review instead of replacing knowledge");
         reader.Messages.Add(Message(7, "배포는 금요일입니다."));
         runner.Reply = () => Digest(Claim("배포 일정", "배포는 금요일입니다.", 999, "존재하지 않는 근거"));
         await service.TickAsync(settings, true); var failedCalls = runner.Calls;
-        check(status.Contains("실패") && Directory.GetFiles(Path.Combine(vault, "자동정리"), "*.md").Length == 1, "Invalid source evidence fails closed and does not publish a note");
+        check(status.Contains("실패") && Directory.GetFiles(Path.Combine(vault, "02-업무지식"), "*.md").Length == 1, "Invalid source evidence fails closed and does not publish a note");
         await service.TickAsync(settings);
         check(runner.Calls == failedCalls, "Failed summaries wait until the next interval rather than retrying every minute");
         runner.Reply = () => Digest(Claim("배포 일정", "배포는 금요일입니다.", 7, "배포는 금요일입니다."));

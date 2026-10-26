@@ -17,18 +17,24 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     private string? summaryPersonaId;
     public bool CanSaveKnowledgeNote => Idle && summaryRoom is not null && summaryPersonaId is not null && !string.IsNullOrWhiteSpace(Answer);
     private bool settingsLoaded, restoringRooms;
+    private bool refreshingOpenRooms;
+    private string? openWindowSignature;
+    private DateTimeOffset lastRoomDiscovery;
+    private readonly System.Windows.Threading.DispatcherTimer roomTicker = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly System.Windows.Threading.DispatcherTimer saveTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
     private bool generating;
     public Visibility AnswerWaitingVisibility => generating ? Visibility.Visible : Visibility.Collapsed;
     private CancellationTokenSource? bots;
+    private Task botsTask = Task.CompletedTask;
+    internal Task WaitForBotsAsync() => Task.WhenAll(botsTask, ForwardPanel.DrainAsync());
     private int activeBots;
     public ObservableCollection<string> BotStatuses { get; } = [];
     public bool BotsRunning => bots is not null;
     public bool CanStartBots => service is not null && !BotsRunning && Idle;
     private readonly System.Diagnostics.Stopwatch elapsed = new();
     private readonly System.Windows.Threading.DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
-    public string BotState => BotsRunning ? $"● 자동 답장 가동 중 · {activeBots}/3개 방" : "○ 자동 답장 꺼짐";
-    public string BotBadge => BotsRunning ? $"● 자동답장 {activeBots}/3" : "○ 자동답장 꺼짐";
+    public string BotState => BotsRunning ? $"● 자동 답장 가동 중 · {activeBots}개 방" : "○ 자동 답장 꺼짐";
+    public string BotBadge => BotsRunning ? $"● 자동답장 {activeBots}개 방" : "○ 자동답장 꺼짐";
     public int PersonaBindingsRevision { get; private set; }
     public string Activity => Busy ? $"{Status} · {elapsed.Elapsed:mm\\:ss} 경과" : Status;
     public Visibility ProgressVisibility => Busy ? Visibility.Visible : Visibility.Collapsed;
@@ -57,6 +63,7 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     public string[] ProviderChoices { get; } = ["auto", "codex", "grok", "claude"];
     public string[] EffortChoices { get; } = ["default", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "ultracode"];
     public ObservableCollection<LocalRoom> Rooms { get; } = [];
+    public ObservableCollection<LocalRoom> OpenBotRooms { get; } = [];
     public LocalRoom? SelectedRoom { get => selectedRoom; set { selectedRoom = value; if (settingsLoaded && !restoringRooms) { Settings.SelectedChatRoom = value is null ? null : AiSettings.RoomKey(value.Profile, value.Id); QueueSave(); } Transcript = ""; ContextHint = "대화 읽기로 문맥을 확인하세요."; Changed(); } }
     public string Question { get; set; } = "";
     public string Answer { get => answer; set { answer = value; Changed(); } }
@@ -73,6 +80,9 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     public AiPanel()
     {
         InitializeComponent(); DataContext = this; ticker.Tick += (_, _) => Changed();
+        roomTicker.Tick += async (_, _) => await RefreshOpenRoomsAsync();
+        Loaded += async (_, _) => { roomTicker.Start(); await RefreshOpenRoomsAsync(); };
+        Unloaded += (_, _) => roomTicker.Stop();
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); if (settingsLoaded) Save(); };
         AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler((_, _) => QueueSave()));
         AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent, new SelectionChangedEventHandler((_, _) => QueueSave()));
@@ -100,6 +110,7 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
         PersonaImages.PropertyChanged += (_, _) => Changed();
         PersonaImages.Initialize(() => EditingProfile!, Save, () => Settings);
         Detect(); Changed();
+        ForwardPanel.Initialize(ai, () => Settings, SaveSettings, sender);
     }
     private void Changed() => PropertyChanged?.Invoke(this, new(string.Empty));
     internal bool SaveSettings() { var saved = Save(); Changed(); return saved; }
@@ -148,21 +159,54 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
         Status = "카카오톡 로컬 대화방 확인 중"; Changed();
         var list = await service!.Chats.RoomsAsync(ct);
         ApplyRooms(list);
-        Status = $"{list.Count}개 방 · 키 확인 {list.Count(r => r.Readable)}개. 읽을 수 없는 방은 카카오톡에서 열어주세요.";
+        Status = $"열린 방 {OpenBotRooms.Count}개 · 로컬 방 {list.Count}개";
     });
-    private void ApplyRooms(List<LocalRoom> list)
+    private static string WindowSignature(List<ConversationTarget> windows) => string.Join("\n",
+        windows.Select(w => $"{w.ProcessId}:{w.Handle}:{w.Ambiguous}:{w.Title}").Order(StringComparer.Ordinal));
+    private async Task RefreshOpenRoomsAsync()
     {
+        if (!IsLoaded || !IsVisible || !Idle || BotsRunning || refreshingOpenRooms) return;
+        refreshingOpenRooms = true;
+        try
+        {
+            var windows = await Task.Run(ConversationCatalog.Scan);
+            if (!Idle || BotsRunning || !IsLoaded) return;
+            var list = Rooms.ToList();
+            // A newly opened room can precede the local DB entry/key. Retry discovery
+            // without requiring the user to close and reopen either application.
+            var missing = windows.Any(w => !list.Any(r => r.Title == w.Title));
+            var discover = (list.Count == 0 || missing) && DateTimeOffset.UtcNow - lastRoomDiscovery >= TimeSpan.FromSeconds(30);
+            if (discover)
+            {
+                lastRoomDiscovery = DateTimeOffset.UtcNow;
+                list = await service!.Chats.RoomsAsync();
+                windows = await Task.Run(ConversationCatalog.Scan);
+            }
+            if (!Idle || BotsRunning || !IsLoaded) return;
+            if (!discover && openWindowSignature == WindowSignature(windows)) return;
+            ApplyRooms(list, windows);
+            Changed();
+        }
+        catch (Exception error) { Status = "열린 방 갱신 실패: " + error.Message; Changed(); }
+        finally { refreshingOpenRooms = false; }
+    }
+    private void ApplyRooms(List<LocalRoom> list, List<ConversationTarget>? windows = null)
+    {
+        windows ??= ConversationCatalog.Scan();
+        openWindowSignature = WindowSignature(windows);
         var previous = SelectedRoom;
         restoringRooms = true;
         try
         {
             Rooms.Clear(); foreach (var r in list) Rooms.Add(r);
+            OpenBotRooms.Clear();
+            foreach (var room in AutoReplyReadiness.OpenRooms(list, windows)) OpenBotRooms.Add(room);
             SelectedRoom = list.FirstOrDefault(r => r.Id == previous?.Id && r.Profile == previous.Profile)
                 ?? list.FirstOrDefault(r => AiSettings.RoomKey(r.Profile, r.Id) == Settings.SelectedChatRoom) ?? list.FirstOrDefault(r => r.Readable);
             botSelectionOrder.Clear();
             foreach (var key in Settings.SelectedBotRooms)
             {
-                var room = list.FirstOrDefault(r => AiSettings.RoomKey(r.Profile, r.Id) == key);
+                var room = OpenBotRooms.FirstOrDefault(r => AiSettings.RoomKey(r.Profile, r.Id) == key);
                 if (room is null || botSelectionOrder.Contains(room)) continue;
                 botSelectionOrder.Add(room); BotRooms.SelectedItems.Add(room);
             }
@@ -217,8 +261,9 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     private async void StartBot_Click(object sender, RoutedEventArgs e)
     {
         if (!CanStartBots || !Save() || send is null) return;
+        ApplyRooms(Rooms.ToList());
         var selected = BotRooms.SelectedItems.Cast<LocalRoom>().ToList();
-        if (selected.Count is < 1 or > 3) { Status = "자동 답장할 방을 1~3개 선택하세요."; Changed(); return; }
+        if (selected.Count == 0) { Status = "자동 답장할 방을 선택하세요."; Changed(); return; }
         if (!System.Numerics.BigInteger.TryParse(SelfId.Trim(), out var self) || self <= 0) { Status = "내 사용자 ID를 입력하세요."; Changed(); return; }
         var selfId = SelfId.Trim(); var trigger = Trigger.Trim();
         List<LocalRoom>? prepared = null;
@@ -257,10 +302,10 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
             catch (Exception error) { BotStatuses[index] = $"{room.Title} · 실패로 중지: {error.Message}"; }
             finally { roomTimer.Stop(); activeBots--; Changed(); }
         }
-        try { await Task.WhenAll(selected.Select(RunRoom)); }
+        try { botsTask = Task.WhenAll(selected.Select(RunRoom)); await botsTask; }
         finally { bots = null; if (!Busy) Status = "자동 답장 종료 · 방별 결과를 확인하세요."; Changed(); }
     }
-    public void Stop() { saveTimer.Stop(); if (settingsLoaded) Save(); operation?.Cancel(); bots?.Cancel(); PersonaImages.Stop(); }
+    public void Stop() { roomTicker.Stop(); ForwardPanel.Stop(); saveTimer.Stop(); if (settingsLoaded) Save(); operation?.Cancel(); bots?.Cancel(); PersonaImages.Stop(); }
     private void StopBots_Click(object sender, RoutedEventArgs e) => bots?.Cancel();
     private void Cancel_Click(object sender, RoutedEventArgs e) => operation?.Cancel();
 }
