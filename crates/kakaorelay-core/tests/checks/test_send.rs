@@ -4,7 +4,9 @@
 use std::path::Path;
 
 use kakaorelay_core::compose::ComposeSession;
-use kakaorelay_core::platform::{ConversationTarget, same_text};
+use kakaorelay_core::platform::{
+    ConversationTarget, SendTarget, TextTransport, TransportError, same_text,
+};
 use kakaorelay_core::test_send::{
     self, TestSendReceipt, TestSendRequest, read_history, receipt_path, record_observed,
 };
@@ -254,5 +256,44 @@ fn workspace(ledger: &Path, check: &Check) {
             Err(kakaorelay_ai::Error::InvalidOperation(_))
         ),
         "History cannot mark an unsent blocked request as observed",
+    );
+}
+
+/// 지연 발송 중 사용자 키 입력이 섞이는 입력창(맥 실측 2026-11-23).
+struct Interleaved(FakeText);
+
+impl TextTransport for Interleaved {
+    fn foreground_window(&self) -> String {
+        self.0.foreground_window()
+    }
+    fn validate_target(&mut self, target: &dyn SendTarget) -> Result<(), TransportError> {
+        self.0.validate_target(target)
+    }
+    fn read_draft(&mut self) -> Result<Option<String>, TransportError> {
+        self.0.read_draft()
+    }
+    fn write_draft(&mut self, message: &str) -> Result<(), TransportError> {
+        self.0.write_draft(&format!("{message}3"))
+    }
+    fn post_enter(&mut self) -> Result<(), TransportError> {
+        self.0.post_enter()
+    }
+    fn confirm_after_enter(&mut self, target: &dyn SendTarget) -> Result<bool, TransportError> {
+        self.0.confirm_after_enter(target)
+    }
+    fn verify_after_delay(&self) -> bool {
+        true
+    }
+}
+
+pub fn interleaved_input(root: &Path, check: &Check) {
+    let ledger = root.join("interleaved-ledger");
+    let mut delayed = request("interleaved");
+    delayed.send_delay_ms = Some(0);
+    let mut transport = Interleaved(FakeText::default());
+    let outcome = test_send::send_once(&delayed, &mut transport, &ledger);
+    check.check(
+        transport.0.posts == 0 && outcome.map_or(true, |r| !r.enter_posted),
+        "A delayed send re-reads the editor before Enter when the transport asks for it and stops if typed keys were mixed in",
     );
 }

@@ -201,6 +201,38 @@ pub async fn run(root: &Path, check: &Check) {
         );
     }
 
+    // 사용자 요청(2026-11-23): 확인되지 않은 발송이 있어도 세션을 끝내지 않고 다음 호출에 답한다.
+    let stop = CancellationToken::new();
+    let resilient = fakes::ai(
+        reader.clone(),
+        store.clone(),
+        Arc::new(Runner(Box::new(|| {}))),
+    );
+    let stop_after = stop.clone();
+    let resilient_sent = Arc::new(Mutex::new(Vec::<ApiSendCommand>::new()));
+    let session = Arc::new(AutoReplySession::new(
+        resilient,
+        recorder(resilient_sent.clone(), move |_, count| {
+            if count == 2 {
+                stop_after.cancel();
+                return ready(confirmed());
+            }
+            ready(fakes::receipt(true, Some(false)))
+        }),
+        Some(DailyReplyHistory::new(root.join("resilient-days"), None)),
+        None,
+    ));
+    let timeout = stop.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        timeout.cancel();
+    });
+    let outcome = session.run(&room, "1", &stop).await;
+    check.check(
+        resilient_sent.lock().unwrap().len() == 2 && matches!(outcome, Err(Error::Cancelled)),
+        "An unconfirmed reply does not end the session; the next call is still answered and only cancellation stops it",
+    );
+
     let candidate = message("6", "2", "@bot congratulations");
     let mut result = fakes::result("축하해요!", &room);
     result.emotion = "happy".into();

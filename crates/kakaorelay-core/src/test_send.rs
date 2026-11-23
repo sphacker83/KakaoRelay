@@ -344,6 +344,14 @@ fn dispatch(
     let mut unreadable_note = None;
     if let Some(delay) = request.send_delay_ms {
         sleep_ms(delay);
+        if readable && transport.verify_after_delay() && !receipt.input_response_timed_out {
+            let back = transport.read_draft()?;
+            if !back.is_some_and(|b| same_text(&b, &request.message)) {
+                return Err(Error::invalid_operation(
+                    "Input read-back differs from the requested message",
+                ));
+            }
+        }
         if !readable {
             unreadable_note =
                 Some("입력창을 읽을 수 없어 기존 초안 검사를 생략했습니다.".to_string());

@@ -133,6 +133,11 @@ pub trait TextTransport: Send {
     fn write_draft(&mut self, message: &str) -> Result<(), TransportError>;
     /// 되돌릴 수 없는 전송 요청. 정확히 한 번만 호출된다.
     fn post_enter(&mut self) -> Result<(), TransportError>;
+    /// 지연 발송(API 경로)에서도 Enter 직전에 입력창을 다시 읽어 본문과 같은지 확인할지. 원본(Windows)은 확인하지 않는다.
+    /// macOS는 포커스를 쓰는 합성 키 입력이라 대기 중 사용자 키 입력이 섞일 수 있어 확인한다(2026-11-23 실측).
+    fn verify_after_delay(&self) -> bool {
+        false
+    }
     /// Enter 이후 처리 확인(원장 `inputCleared`). Windows는 입력창 비움(150ms×8회), macOS는 DB의 새 발신 메시지 확인.
     /// `false`는 "확인하지 못함"이며 실패로 재전송하지 않는다.
     fn confirm_after_enter(&mut self, target: &dyn SendTarget) -> Result<bool, TransportError>;

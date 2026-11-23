@@ -317,6 +317,10 @@ impl MacTextTransport {
 }
 
 impl TextTransport for MacTextTransport {
+    fn verify_after_delay(&self) -> bool {
+        true
+    }
+
     fn foreground_window(&self) -> String {
         crate::app::frontmost_pid()
             .and_then(front_window)

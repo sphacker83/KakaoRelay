@@ -22,6 +22,9 @@ use crate::test_send::TestSendReceipt;
 pub type CommandSend =
     Arc<dyn Fn(ApiSendCommand) -> BoxFuture<'static, Result<TestSendReceipt>> + Send + Sync>;
 
+/// 폴링 오류 뒤 쉬는 시간. 화면 잠김·DB 일시 오류 동안 상태 문구가 쏟아지지 않게 한다.
+const ERROR_PAUSE: Duration = Duration::from_secs(5);
+
 const TRIGGER_PUNCTUATION: &str = ".,!?;:~，。！？";
 
 /// 원본 `char.ToUpperInvariant` 서수 비교. 한 글자 대응만 쓴다.
@@ -424,13 +427,26 @@ impl AutoReplySession {
     ) -> Result<()> {
         let reader = self.ai.chats().clone();
         let title = &room.title;
-        let mut settings = self.ai.settings().load()?;
+        // 사용자 요청(2026-11-23): 오류로 세션을 끝내지 않는다. 기준점 읽기도 성공할 때까지 다시 시도한다.
+        let (mut settings, mut watermark) = loop {
+            let started = async {
+                let settings = self.ai.settings().load()?;
+                let baseline =
+                    chat_read(reader.as_ref(), &room.profile, &room.id, 1, cancel).await?;
+                let watermark = baseline
+                    .messages
+                    .last()
+                    .map_or_else(|| "0".to_string(), |m| m.id.clone());
+                Ok::<_, Error>((settings, watermark))
+            }
+            .await;
+            match started {
+                Ok(ready) => break ready,
+                Err(Error::Cancelled) if cancel.is_cancelled() => return Err(Error::Cancelled),
+                Err(error) => self.pause_after_error(title, &error, cancel).await?,
+            }
+        };
         let mut mode = settings.reply_mode_for_room(&room.profile, &room.id);
-        let baseline = chat_read(reader.as_ref(), &room.profile, &room.id, 1, cancel).await?;
-        let mut watermark = baseline
-            .messages
-            .last()
-            .map_or_else(|| "0".to_string(), |m| m.id.clone());
         self.report(&format!(
             "{title} 대기 중 · {mode} · {}초 폴링 · 시작 이후 새 메시지만 답장",
             settings.poll_seconds
@@ -441,85 +457,149 @@ impl AutoReplySession {
                 () = cancel.cancelled() => return Err(Error::Cancelled),
                 () = tokio::time::sleep(delay) => {}
             }
-            let context = chat_read(reader.as_ref(), &room.profile, &room.id, 500, cancel).await?;
-            if context.messages.len() == 500
-                && MessageId::parse(&context.messages[0].id)? > MessageId::parse(&watermark)?
+            match self
+                .poll_once(
+                    room,
+                    self_id,
+                    jobs,
+                    cancel,
+                    &mut watermark,
+                    &mut settings,
+                    &mut mode,
+                )
+                .await
             {
-                return Err(Error::invalid_operation(
-                    "새 메시지가 읽기 범위를 초과해 중지했습니다. 누락된 호출을 확인하세요.",
-                ));
+                Ok(()) => {}
+                Err(Error::Cancelled) if cancel.is_cancelled() => return Err(Error::Cancelled),
+                Err(error) => self.pause_after_error(title, &error, cancel).await?,
             }
-            settings = self.ai.settings().load()?;
-            mode = settings.reply_mode_for_room(&room.profile, &room.id);
-            let trigger = settings.trigger_for_room(&room.profile, &room.id)?;
-            self.greet(room, &context.messages, &watermark, self_id)
-                .await?;
-            let mut pending = candidates_with_self_call(
-                &context.messages,
-                &watermark,
-                self_id,
-                if mode == "trigger" { &trigger } else { "" },
-                &trigger,
-            )?;
-            pending.retain(|m| !self.is_own_reply(m, self_id));
-            if mode == "context" {
-                let persona = settings.resolve_persona(&room.profile, &room.id)?.persona;
-                let mut approved = vec![];
-                for candidate in pending {
-                    let candidate_id = MessageId::parse(&candidate.id)?;
-                    let mut recent = vec![];
-                    for message in &context.messages {
-                        if MessageId::parse(&message.id)? <= candidate_id {
-                            recent.push(message.clone());
-                        }
-                    }
-                    let mut recent = recent.split_off(recent.len().saturating_sub(20));
-                    for message in recent.iter_mut().filter(|m| m.id == candidate.id) {
-                        *message = reader.read_attachment(message.clone()).await?;
-                    }
-                    let status = self.status.clone();
-                    let progress_title = title.clone();
-                    let progress = move |s: &str| status.emit(&format!("{progress_title} · {s}"));
-                    let needed = self
-                        .ai
-                        .reply_judge
-                        .should_reply(&settings, &persona, &recent, cancel, Some(&progress))
-                        .await?;
-                    self.report(&format!(
-                        "{title} · 메시지 {} · {}",
-                        candidate.id,
-                        if needed {
-                            "답변 필요"
-                        } else {
-                            "맥락상 답변 생략"
-                        }
-                    ));
-                    if needed {
-                        approved.push(candidate);
-                    }
-                }
-                pending = approved;
-            }
-            for candidate in &pending {
-                // 생성 전에 호출을 소비한다. 실패를 새 발송으로 재시도하지 않는다.
-                self.report(&format!(
-                    "{title} 답변 생성 중 · 이번 묶음 {}개 호출",
-                    pending.len()
-                ));
-                self.reply_to(room, candidate, jobs, cancel).await?;
-            }
-            if let Some(last) = context.messages.last() {
-                watermark = last.id.clone();
-            }
-            let grok = match jobs.pending() {
-                0 => String::new(),
-                n => format!(" · Grok {n}건 진행 중"),
-            };
-            self.report(&format!(
-                "{title} 대기 중 · 마지막 확인 {} · {mode} · {}초 폴링{grok}",
-                chrono::Local::now().format("%H:%M:%S"),
-                settings.poll_seconds
+        }
+    }
+
+    /// 오류를 상태에 남기고 잠시 쉰 뒤 감시를 이어 간다. 취소되면 `Cancelled`를 돌려준다.
+    async fn pause_after_error(
+        &self,
+        title: &str,
+        error: &Error,
+        cancel: &CancellationToken,
+    ) -> Result<()> {
+        self.report(&format!(
+            "{title} · 오류: {error} · {}초 뒤 계속 감시",
+            ERROR_PAUSE.as_secs()
+        ));
+        tokio::select! {
+            () = cancel.cancelled() => Err(Error::Cancelled),
+            () = tokio::time::sleep(ERROR_PAUSE) => Ok(()),
+        }
+    }
+
+    /// 한 번의 폴링. 읽은 메시지는 실패해도 처리한 것으로 보고 `watermark`를 옮긴다.
+    /// 같은 호출을 다시 처리하지 않으므로, 확인되지 않은 발송을 새로 보내는 일이 없다.
+    #[allow(clippy::too_many_arguments)]
+    async fn poll_once(
+        &self,
+        room: &LocalRoom,
+        self_id: &str,
+        jobs: &BackgroundDelegations,
+        cancel: &CancellationToken,
+        watermark: &mut String,
+        settings: &mut kakaorelay_ai::settings::AiSettings,
+        mode: &mut String,
+    ) -> Result<()> {
+        let reader = self.ai.chats().clone();
+        let title = &room.title;
+        let context = chat_read(reader.as_ref(), &room.profile, &room.id, 500, cancel).await?;
+        let Some(latest) = context.messages.last().map(|m| m.id.clone()) else {
+            return Ok(());
+        };
+        let since = std::mem::replace(watermark, latest);
+        if context.messages.len() == 500
+            && MessageId::parse(&context.messages[0].id)? > MessageId::parse(&since)?
+        {
+            return Err(Error::invalid_operation(
+                "새 메시지가 읽기 범위를 넘어 앞부분을 건너뛰었습니다. 누락된 호출을 확인하세요.",
             ));
         }
+        *settings = self.ai.settings().load()?;
+        *mode = settings.reply_mode_for_room(&room.profile, &room.id);
+        let trigger = settings.trigger_for_room(&room.profile, &room.id)?;
+        match self.greet(room, &context.messages, &since, self_id).await {
+            Ok(()) => {}
+            Err(Error::Cancelled) if cancel.is_cancelled() => return Err(Error::Cancelled),
+            Err(error) => self.report(&format!(
+                "{title} · 자동인사 실패: {error} · 다시 보내지 않음"
+            )),
+        }
+        let mut pending = candidates_with_self_call(
+            &context.messages,
+            &since,
+            self_id,
+            if mode == "trigger" { &trigger } else { "" },
+            &trigger,
+        )?;
+        pending.retain(|m| !self.is_own_reply(m, self_id));
+        if mode == "context" {
+            let persona = settings.resolve_persona(&room.profile, &room.id)?.persona;
+            let mut approved = vec![];
+            for candidate in pending {
+                let candidate_id = MessageId::parse(&candidate.id)?;
+                let mut recent = vec![];
+                for message in &context.messages {
+                    if MessageId::parse(&message.id)? <= candidate_id {
+                        recent.push(message.clone());
+                    }
+                }
+                let mut recent = recent.split_off(recent.len().saturating_sub(20));
+                for message in recent.iter_mut().filter(|m| m.id == candidate.id) {
+                    *message = reader.read_attachment(message.clone()).await?;
+                }
+                let status = self.status.clone();
+                let progress_title = title.clone();
+                let progress = move |s: &str| status.emit(&format!("{progress_title} · {s}"));
+                let needed = self
+                    .ai
+                    .reply_judge
+                    .should_reply(settings, &persona, &recent, cancel, Some(&progress))
+                    .await?;
+                self.report(&format!(
+                    "{title} · 메시지 {} · {}",
+                    candidate.id,
+                    if needed {
+                        "답변 필요"
+                    } else {
+                        "맥락상 답변 생략"
+                    }
+                ));
+                if needed {
+                    approved.push(candidate);
+                }
+            }
+            pending = approved;
+        }
+        for candidate in &pending {
+            // 생성 전에 호출을 소비한다. 실패를 새 발송으로 재시도하지 않는다.
+            self.report(&format!(
+                "{title} 답변 생성 중 · 이번 묶음 {}개 호출",
+                pending.len()
+            ));
+            match self.reply_to(room, candidate, jobs, cancel).await {
+                Ok(_) => {}
+                Err(Error::Cancelled) if cancel.is_cancelled() => return Err(Error::Cancelled),
+                Err(error) => self.report(&format!(
+                    "{title} · 메시지 {} 답변 실패: {error} · 다시 보내지 않고 계속 감시",
+                    candidate.id
+                )),
+            }
+        }
+        let grok = match jobs.pending() {
+            0 => String::new(),
+            n => format!(" · Grok {n}건 진행 중"),
+        };
+        self.report(&format!(
+            "{title} 대기 중 · 마지막 확인 {} · {mode} · {}초 폴링{grok}",
+            chrono::Local::now().format("%H:%M:%S"),
+            settings.poll_seconds
+        ));
+        Ok(())
     }
 }

@@ -52,6 +52,10 @@ fn main() {
             };
         }
         group!("test-send", |r, c| test_send::run(r, &c));
+        group!(
+            "test-send-interleaved",
+            |r, c| test_send::interleaved_input(r, &c)
+        );
         group!("unreadable", |r, c| unreadable::run(r, &c));
         group!("api", |r, c| api::run(r, &c).await);
         group!("auto-reply", |r, c| auto_reply::run(r, &c).await);
