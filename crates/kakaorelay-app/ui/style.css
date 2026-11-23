@@ -94,8 +94,10 @@ main > .page { flex: 1; min-height: 0; padding-top: 12px; }
 .statuses p { font-size: 11px; margin: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .provider-card { border: 1px solid var(--line); border-radius: 7px; padding: 8px; margin-top: 8px; }
 .provider-card .row > label.check { width: 76px; font-weight: 600; margin: 0; }
-.provider-card input.model { flex: 1 1 auto; width: auto !important; min-width: 0; }
-.provider-card input.effort { width: 83px !important; flex: none; }
+.provider-card .combo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.provider-card .combo.model { flex: 1 1 auto; }
+.provider-card .combo.effort { width: 96px; flex: none; }
+.provider-card .combo select, .provider-card .combo input { width: 100% !important; min-width: 0; }
 .answer { position: relative; display: flex; min-height: 70px; }
 .answer textarea { flex: 1; margin: 4px 0; }
 .waiting { position: absolute; top: 12px; left: 12px; right: 12px; background: #fff; color: var(--muted); pointer-events: none; }

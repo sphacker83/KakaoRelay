@@ -170,20 +170,39 @@ function modelStatus(provider) {
   const unverified = provider.model && !catalog.models.includes(provider.model);
   return catalog.status + (unverified ? ' · 현재 선택은 목록 미확인' : '');
 }
+const CUSTOM = '\u0000custom';
+/// 원본 `ComboBox IsEditable="True"`. 목록에서 고르거나 '직접 입력…'으로 목록에 없는 값을 쓴다.
+function comboField({ value, choices, cls, label, defaultLabel, defaultValue = '', onchange }) {
+  const listed = choices.filter(c => c && c !== defaultValue);
+  const select = el('select', { class: cls, ariaLabel: label });
+  const custom = el('input', { class: cls + ' custom', value, ariaLabel: label + ' 직접 입력', placeholder: '직접 입력' });
+  const options = [[defaultValue, defaultLabel], ...listed.map(c => [c, c])];
+  if (value && value !== defaultValue && !listed.includes(value)) options.push([value, value + ' · 목록에 없음']);
+  options.push([CUSTOM, '직접 입력…']);
+  setOptions(select, options, value);
+  const sync = () => { custom.classList.toggle('hidden', select.value !== CUSTOM); };
+  select.onchange = () => {
+    if (select.value === CUSTOM) { custom.value = ''; sync(); custom.focus(); return; }
+    sync(); onchange(select.value);
+  };
+  custom.oninput = () => onchange(custom.value.trim());
+  sync();
+  return el('span', { class: 'combo ' + cls }, [select, custom]);
+}
 function renderProviders() {
   const s = App.settings; if (!s) return;
   $('grokDelegation').checked = s.grokDelegationEnabled;
   $('provider').value = s.provider;
   $('contextMessages').value = s.contextMessages; $('timeoutSeconds').value = s.timeoutSeconds;
   $('providerCards').replaceChildren(...s.providers.map(provider => {
-    const listId = 'models-' + provider.id;
     const catalog = Ai.catalogs[provider.id];
     const choices = catalog?.choices || [''];
     const enabled = el('input', { type: 'checkbox', checked: provider.enabled, onchange: () => { provider.enabled = enabled.checked; queueSave(); } });
-    const model = el('input', { class: 'model', value: provider.model, title: '모델 · 비우면 CLI 기본값', ariaLabel: 'AI 모델', oninput: () => { provider.model = model.value.trim(); status.textContent = modelStatus(provider); queueSave(); } });
-    model.setAttribute('list', listId);
-    const effort = el('input', { class: 'effort', value: provider.effort, ariaLabel: 'AI effort', oninput: () => { provider.effort = effort.value.trim(); queueSave(); } });
-    effort.setAttribute('list', 'effort-choices');
+    const model = comboField({ value: provider.model, choices, cls: 'model', label: 'AI 모델', defaultLabel: 'CLI 기본 모델',
+      onchange: v => { provider.model = v; status.textContent = modelStatus(provider); queueSave(); } });
+    model.title = '모델 · CLI 기본 모델은 각 CLI 설정을 따릅니다';
+    const effort = comboField({ value: provider.effort, choices: EFFORTS.filter(e => e !== 'default'), cls: 'effort', label: 'AI effort', defaultLabel: 'default', defaultValue: 'default',
+      onchange: v => { provider.effort = v; queueSave(); } });
     const status = el('p', { class: 'muted small', text: modelStatus(provider) });
     const exe = el('input', { value: provider.executable, ariaLabel: 'AI 실행 파일 경로', title: '비우면 설치된 CLI 자동 탐색 · 경로 변경 후 모델 새로고침', oninput: () => {
       if (provider.executable === exe.value) return;
@@ -193,7 +212,6 @@ function renderProviders() {
     } });
     return el('div', { class: 'provider-card' }, [
       el('div', { class: 'row' }, [el('label', { class: 'check' }, [enabled, document.createTextNode(provider.id)]), model, effort]),
-      el('datalist', { id: listId }, choices.filter(Boolean).map(c => new Option(c, c))),
       status, exe,
     ]);
   }));
@@ -339,7 +357,6 @@ function initAi(boot) {
   $('provider').onchange = () => { App.settings.provider = $('provider').value; queueSave(); };
   intInput('contextMessages', v => { App.settings.contextMessages = v; });
   intInput('timeoutSeconds', v => { App.settings.timeoutSeconds = v; });
-  document.body.append(el('datalist', { id: 'effort-choices' }, EFFORTS.map(e => new Option(e, e))));
   $('detect').onclick = detect;
   $('chatRoom').onchange = () => selectChatRoom(Ai.rooms[Number($('chatRoom').value)] || null);
   $('readChat').onclick = readChat; $('exportChat').onclick = exportChat; $('importChat').onclick = importChat;

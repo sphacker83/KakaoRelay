@@ -46,6 +46,8 @@ fn parse(args: &[String]) -> Mode {
 }
 
 fn main() {
+    // 스레드를 띄우기 전에 PATH를 정한다(환경 변수 변경은 단일 스레드일 때만 안전하다).
+    os::import_login_path();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match parse(&args) {
         Mode::SendImage(request, output) => cli::send_image(&request, &output),

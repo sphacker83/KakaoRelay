@@ -23,6 +23,63 @@ pub fn platform(_self_id: &str) -> Arc<dyn Platform> {
     Arc::new(kakaorelay_windows::WindowsPlatform::new())
 }
 
+/// Finder·`open`으로 실행한 맥 앱은 PATH가 `/usr/bin:/bin:/usr/sbin:/sbin`뿐이라 bun·npm·Homebrew로 설치한
+/// AI CLI(`codex`는 `#!/usr/bin/env node` 스크립트)를 찾지 못한다(2026-11-23 실측). 로그인 셸의 PATH를 앞에 합친다.
+/// 셸이 5초 안에 끝나지 않거나 실패하면 기존 PATH를 그대로 쓴다.
+#[cfg(target_os = "macos")]
+pub fn import_login_path() {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    const MARK: &str = "__KAKAORELAY_PATH__";
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let Ok(mut child) = Command::new(&shell)
+        .args(["-ilc", &format!("printf '{MARK}%s{MARK}' \"$PATH\"")])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return;
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return;
+            }
+        }
+    }
+    let mut output = String::new();
+    if child
+        .stdout
+        .take()
+        .is_none_or(|mut out| out.read_to_string(&mut output).is_err())
+    {
+        return;
+    }
+    let Some(login) = output.split(MARK).nth(1).filter(|p| !p.is_empty()) else {
+        return;
+    };
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut merged: Vec<&str> = vec![];
+    for dir in login.split(':').chain(current.split(':')) {
+        if !dir.is_empty() && !merged.contains(&dir) {
+            merged.push(dir);
+        }
+    }
+    // SAFETY: main 첫 줄에서 다른 스레드를 만들기 전에 한 번만 호출한다.
+    unsafe { std::env::set_var("PATH", merged.join(":")) };
+}
+
+#[cfg(windows)]
+pub fn import_login_path() {}
+
 /// 원본 `Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })`. 폴더·파일·URL 모두 기본 앱으로 연다.
 pub fn open(target: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
