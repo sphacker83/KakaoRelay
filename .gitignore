@@ -46,3 +46,7 @@ ai-settings.json
 auth.json
 auth.json.*
 .DS_Store
+
+# Rust
+target/
+tmp/

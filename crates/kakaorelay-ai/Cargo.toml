@@ -1,0 +1,50 @@
+[package]
+name = "kakaorelay-ai"
+description = "KakaoRelay AI 엔진: 설정, 페르소나, CLI 프로바이더, 지식베이스 (KakaoRelay.AI 이식)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+base64.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+fancy-regex = "0.14"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+indexmap = { version = "2", features = ["serde"] }
+num-bigint = "0.4"
+pdf_oxide = { version = "0.3.78", default-features = false }
+quick-xml = "0.38"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+unicode-normalization = "0.1"
+url = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[dev-dependencies]
+kakaorelay-testkit.workspace = true
+
+[[test]]
+name = "checks"
+path = "tests/checks/main.rs"
+harness = false
+
+[lints]
+workspace = true

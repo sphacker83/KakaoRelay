@@ -1,0 +1,36 @@
+[package]
+name = "kakaorelay-core"
+description = "KakaoRelay 공통 엔진: 발송 원장, HTTP API, 자동답장, 정리감시, 제어방, 플랫폼 계약 (KakaoRelay.Core 이식)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kakaorelay-ai.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+getrandom = "0.4"
+indexmap = { version = "2", features = ["serde"] }
+
+[dev-dependencies]
+kakaorelay-testkit.workspace = true
+reqwest = { version = "0.12", default-features = false }
+
+[[test]]
+name = "checks"
+path = "tests/checks/main.rs"
+harness = false
+
+[lints]
+workspace = true

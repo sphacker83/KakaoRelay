@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.10.0"
+edition = "2024"
+rust-version = "1.100"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+kakaorelay-ai = { path = "crates/kakaorelay-ai" }
+kakaorelay-core = { path = "crates/kakaorelay-core" }
+kakaorelay-macos = { path = "crates/kakaorelay-macos" }
+kakaorelay-windows = { path = "crates/kakaorelay-windows" }
+kakaorelay-testkit = { path = "crates/kakaorelay-testkit" }
+async-trait = "0.1"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+hex = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha1 = "0.10"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+# 디스크 여유가 적은 개발 환경을 위해 의존성 디버그 정보를 빼고, 작업 crate는 줄 번호만 남긴다.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

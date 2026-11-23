@@ -1,0 +1,15 @@
+[package]
+name = "kakaorelay-testkit"
+description = "KakaoRelay 테스트 보조: 가짜 Codex/Claude/Grok CLI 바이너리와 임시 폴더 도우미"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

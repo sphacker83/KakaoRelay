@@ -1,0 +1,102 @@
+{
+  "generatedBy": ".NET 10.0.2",
+  "cases": [
+    {
+      "name": "roomKey.ascii",
+      "input": "[\u0022ABCDEF0123\u0022,\u002218273645\u0022]",
+      "hash": "66CF59B4F28EB0CA0244A2A8C868DDF1E41AFA51DFE15A28E351F82897307432"
+    },
+    {
+      "name": "roomKey.tricky",
+      "input": "[\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u00221\u0022]",
+      "hash": "B2172E184905F557CF2BF315C13ECEBE96CA2A94FC0A690541367AE36A7EA5B1"
+    },
+    {
+      "name": "promptJson.tricky",
+      "input": "{\u0022Text\u0022:\u0022한글 \\u0022따옴표\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ 줄\\n바꿈\\t탭 \\uD83D\\uDE00 é \\u0001 \\u2028\u0022,\u0022List\u0022:[\u0022가\u0022,\u0022b\u0022]}",
+      "hash": "06790A03890712AAD85BCDED60D8135584C79BB171FB6883C8B7C1BEDF3CE1B0"
+    },
+    {
+      "name": "default.tricky",
+      "input": "{\u0022Text\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022}",
+      "hash": "60750A1EF17BCA509FC5E8340442687CC4FA9922107BF058A9962FF10B31F40F"
+    },
+    {
+      "name": "messageFingerprint.0",
+      "input": "{\u0022Id\u0022:\u00229001\u0022,\u0022AuthorId\u0022:\u002277\u0022,\u0022Author\u0022:\u0022\\uD64D\\uAE38\\uB3D9\u0022,\u0022Time\u0022:\u00222026-09-28T13:23:00\u002B09:00\u0022,\u0022Type\u0022:1,\u0022Text\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u0022Deleted\u0022:false}",
+      "hash": "3A04863C05AF7D8BA4FE72175C19A3F26E9005632C148400038C9AE73A8439CE"
+    },
+    {
+      "name": "messageFingerprint.1",
+      "input": "{\u0022Id\u0022:\u00229001\u0022,\u0022AuthorId\u0022:\u002277\u0022,\u0022Author\u0022:\u0022\\uD64D\\uAE38\\uB3D9\u0022,\u0022Time\u0022:\u00222026-09-28T13:23:00.12\u002B09:00\u0022,\u0022Type\u0022:1,\u0022Text\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u0022Deleted\u0022:false}",
+      "hash": "3FC1D89918EFE1CB29ABBE51D34E7495D1CCB546E72FB9186213E0BF5D34A1D2"
+    },
+    {
+      "name": "messageFingerprint.2",
+      "input": "{\u0022Id\u0022:\u00229001\u0022,\u0022AuthorId\u0022:\u002277\u0022,\u0022Author\u0022:\u0022\\uD64D\\uAE38\\uB3D9\u0022,\u0022Time\u0022:\u00222026-01-02T03:04:05.1234568\u002B00:00\u0022,\u0022Type\u0022:1,\u0022Text\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u0022Deleted\u0022:false}",
+      "hash": "9BE907EAE1120DB46174F9668832FDC8168924C99FA56530E50730DB6CFEA69B"
+    },
+    {
+      "name": "conversationFolder.default",
+      "input": "{\u0022Profile\u0022:\u0022ABCDEF0123\u0022,\u0022RoomId\u0022:\u002218273645\u0022,\u0022provider\u0022:{\u0022Id\u0022:\u0022codex\u0022,\u0022Enabled\u0022:true,\u0022Executable\u0022:\u0022\u0022,\u0022Model\u0022:\u0022gpt-6-luna\u0022,\u0022Effort\u0022:\u0022low\u0022},\u0022persona\u0022:{\u0022Name\u0022:\u0022\\uADF8\\uCAC0\\uCFE0\u0022,\u0022Role\u0022:\u0022\\uB300\\uD654 \\uB9E5\\uB77D\\uC744 \\uC774\\uD574\\uD558\\uACE0 \\uD544\\uC694\\uD55C \\uB2F5\\uBCC0\\uACFC \\uC5C5\\uBB34 \\uC815\\uB9AC\\uB97C \\uB3D5\\uB294 AI \\uCC57\\uBD07\u0022,\u0022Tone\u0022:\u0022\\uCE5C\\uC808\\uD558\\uACE0 \\uCC28\\uBD84\\uD55C \\uC874\\uB313\\uB9D0\u0022,\u0022Style\u0022:\u0022\\uD575\\uC2EC\\uBD80\\uD130 \\uC9E7\\uAC8C \\uB2F5\\uD558\\uACE0, \\uBD88\\uD655\\uC2E4\\uD55C \\uB0B4\\uC6A9\\uC740 \\uD655\\uC778 \\uC9C8\\uBB38\\uC744 \\uD55C\\uB2E4. \\uACFC\\uC7A5\\uD558\\uC9C0 \\uC54A\\uB294\\uB2E4.\u0022,\u0022Instructions\u0022:\u0022\\uB300\\uD654\\uC5D0 \\uC5C6\\uB294 \\uC0AC\\uC2E4\\uC744 \\uB9CC\\uB4E4\\uC9C0 \\uC54A\\uB294\\uB2E4. \\uBBFC\\uAC10\\uD55C \\uC815\\uBCF4\\uB294 \\uB2F5\\uBCC0\\uC5D0 \\uBD88\\uD544\\uC694\\uD558\\uAC8C \\uBC18\\uBCF5\\uD558\\uC9C0 \\uC54A\\uB294\\uB2E4.\u0022}}",
+      "hash": "F8610DD33B5D998D40CA0C158500EE8FDF45B8C68A7D6E0AD0E7AABF942B066D"
+    },
+    {
+      "name": "conversationFolder.custom",
+      "input": "{\u0022Profile\u0022:\u0022ABCDEF0123\u0022,\u0022RoomId\u0022:\u002218273645\u0022,\u0022provider\u0022:{\u0022Id\u0022:\u0022claude\u0022,\u0022Enabled\u0022:false,\u0022Executable\u0022:\u0022/opt/homebrew/bin/claude\u0022,\u0022Model\u0022:\u0022claude-opus-5-5[1m]\u0022,\u0022Effort\u0022:\u0022default\u0022},\u0022persona\u0022:{\u0022Name\u0022:\u0022\\uBD07\u0022,\u0022Role\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u0022Tone\u0022:\u0022\\uBC18\\uB9D0\u0022,\u0022Style\u0022:\u0022\\uC9E7\\uAC8C\u0022,\u0022Instructions\u0022:\u0022\u0022}}",
+      "hash": "E70E70FE95B111DB45AFE5FD7EDEF2540993C5F0DDF232E03356A12D52959FC9"
+    },
+    {
+      "name": "testSendFingerprint",
+      "input": "{\u0022Recipient\u0022:\u0022\\uB098\\uC640\\uC758 \\uCC44\\uD305\u0022,\u0022Message\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022,\u0022ExpectedProcessId\u0022:1234,\u0022ExpectedWindowHandle\u0022:\u00220x1A2B\u0022,\u0022VerifiedEmptyPlaceholder\u0022:true}",
+      "hash": "BFA18984F3032CC438A3748EEEECBE4B59EC5D9E28F138FC92DFD799F3C8EC41"
+    },
+    {
+      "name": "apiFingerprint.text",
+      "input": "{\u0022Recipient\u0022:\u0022\\uBC29\u0022,\u0022Message\u0022:\u0022\\uD55C\\uAE00 \\u0022\\uB530\\uC634\\uD45C\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ \\uC904\\n\\uBC14\\uAFC8\\t\\uD0ED \\uD83D\\uDE00 \\u00E9 \\u0001 \\u2028\u0022}",
+      "hash": "B922AE37A86E7FA7EE20502872856B637CB140BB5B534D484B8D504A3ACBBFCC"
+    },
+    {
+      "name": "apiFingerprint.image",
+      "input": "{\u0022Recipient\u0022:\u0022\\uBC29\u0022,\u0022ImagePath\u0022:\u0022/Users/x/\\uADF8\\uB9BC 1.png\u0022}",
+      "hash": "5C1018225AE01DBD7A4A7C9FF371163702AA43BDFA98F0D0EC8C2D24CA4490DF"
+    },
+    {
+      "name": "apiFingerprint.attachment",
+      "input": "{\u0022Recipient\u0022:\u0022\\uBC29\u0022,\u0022Message\u0022:\u0022\u0022,\u0022Attachment\u0022:{\u0022PersonaId\u0022:\u0022default\u0022,\u0022Provider\u0022:\u0022astra\u0022,\u0022ImageId\u0022:\u00220123456789abcdef0123456789abcdef\u0022}}",
+      "hash": "CECA4E40689FF66CF955D052AC7419046925241E29439DB6B492D7B38657362B"
+    },
+    {
+      "name": "summaryIdentity",
+      "input": "{\u0022Id\u0022:\u00220123456789abcdef0123456789abcdef\u0022,\u0022Sources\u0022:[\u0022[\\u0022P\\u0022,\\u002210\\u0022]\u0022,\u0022[\\u0022P\\u0022,\\u00222\\u0022]\u0022],\u0022Destination\u0022:\u0022[\\u0022P\\u0022,\\u00223\\u0022]\u0022}",
+      "hash": "479375A497B076FCD4BC8B8B9F3851E77679954D4A7FA5518BFB5CE98806666D"
+    },
+    {
+      "name": "summaryFactKey",
+      "input": "{\u0022Topic\u0022:\u0022출시 일정\u0022,\u0022Sources\u0022:[\u0022방A\u0022,\u0022방B\u0022]}",
+      "hash": "D8333E204893C343735030598D4640680E2247371948225919891F5F6497A0E2"
+    },
+    {
+      "name": "autoKnowledgeCheckpoint",
+      "input": "{\u0022Profile\u0022:\u0022P\u0022,\u0022RoomId\u0022:\u00222\u0022,\u0022Generation\u0022:\u00228f0d7c1e-6b1a-4c55-9b4e-0d7d0c3f2a11\u0022,\u0022vault\u0022:\u0022/Users/x/보관함\u0022,\u0022SelfId\u0022:\u002212345\u0022}",
+      "hash": "00D360FA10B3106D1E06A13B5984F141B88935B7CFAFE1136F72936F2403450D"
+    },
+    {
+      "name": "dailyReplyEntry",
+      "input": "{\u0022Day\u0022:\u00222026-11-23\u0022,\u0022FirstReply\u0022:\u0022bot-ABC\u0022}",
+      "hash": "BC62AD04AC66488F8CD99CBD07632440434453CA3D82CE1816A112AF2D2064B3"
+    },
+    {
+      "name": "conversationState",
+      "input": "{\u0022SessionId\u0022:\u0022s-1\u0022,\u0022KnowledgeRevision\u0022:null,\u0022InstructionsDate\u0022:\u00222026-11-23\u0022,\u0022InstructionsRevision\u0022:\u0022R\u0022,\u0022Seen\u0022:[\u0022H1\u0022]}",
+      "hash": "C4AC1320AF95F87E4E6E81E688BA48FD62B61911040A6523609142F4999DF4E1"
+    },
+    {
+      "name": "reportOptions.time",
+      "input": "{\n  \u0022startedAt\u0022: \u00222026-09-28T13:23:00.12\u002B09:00\u0022,\n  \u0022finishedAt\u0022: null,\n  \u0022inputCleared\u0022: true,\n  \u0022detail\u0022: \u0022한글 \\u0022따옴표\\u0022 \\u003Ctag\\u003E \\u0026 \\u0027 \\u002B \\\\ 줄\\n바꿈\\t탭 \\uD83D\\uDE00 é \\u0001 \\u2028\u0022\n}",
+      "hash": "BF340129B63C19BB647FEA6E663C669636DE3487D02EAB10060D7789E849C22E"
+    }
+  ],
+  "settingsDefault": "{\n  \u0022selfId\u0022: \u0022\u0022,\n  \u0022trigger\u0022: \u0022@그쫀쿠\u0022,\n  \u0022pollSeconds\u0022: 5,\n  \u0022imageGptModel\u0022: \u0022gpt-6-astra\u0022,\n  \u0022imageGrokModel\u0022: \u0022grok-4.7\u0022,\n  \u0022replyMode\u0022: \u0022trigger\u0022,\n  \u0022roomReplyModes\u0022: {},\n  \u0022selectedBotRooms\u0022: [],\n  \u0022autoKnowledge\u0022: {\n    \u0022enabled\u0022: false,\n    \u0022intervalMinutes\u0022: 30,\n    \u0022autoSave\u0022: true,\n    \u0022rooms\u0022: []\n  },\n  \u0022summaryForwards\u0022: [],\n  \u0022selectedChatRoom\u0022: null,\n  \u0022provider\u0022: \u0022auto\u0022,\n  \u0022contextMessages\u0022: 100,\n  \u0022timeoutSeconds\u0022: 180,\n  \u0022grokDelegationEnabled\u0022: false,\n  \u0022grokTimeoutSeconds\u0022: 600,\n  \u0022persona\u0022: {\n    \u0022name\u0022: \u0022그쫀쿠\u0022,\n    \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n    \u0022tone\u0022: \u0022친절하고 차분한 존댓말\u0022,\n    \u0022style\u0022: \u0022핵심부터 짧게 답하고, 불확실한 내용은 확인 질문을 한다. 과장하지 않는다.\u0022,\n    \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n  },\n  \u0022personas\u0022: [\n    {\n      \u0022id\u0022: \u0022default\u0022,\n      \u0022label\u0022: \u0022기본\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022그쫀쿠\u0022,\n        \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n        \u0022tone\u0022: \u0022친절하고 차분한 존댓말\u0022,\n        \u0022style\u0022: \u0022핵심부터 짧게 답하고, 불확실한 내용은 확인 질문을 한다. 과장하지 않는다.\u0022,\n        \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    },\n    {\n      \u0022id\u0022: \u0022work\u0022,\n      \u0022label\u0022: \u0022업무\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022업무 도우미\u0022,\n        \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n        \u0022tone\u0022: \u0022정중하고 간결한 존댓말\u0022,\n        \u0022style\u0022: \u0022할 일과 결론부터 명확하게 정리한다.\u0022,\n        \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    },\n    {\n      \u0022id\u0022: \u0022friend\u0022,\n      \u0022label\u0022: \u0022친구\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022친구\u0022,\n        \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n        \u0022tone\u0022: \u0022따뜻하고 편안한 말투\u0022,\n        \u0022style\u0022: \u0022상대방의 감정에 공감하고 자연스럽게 대화한다.\u0022,\n        \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    }\n  ],\n  \u0022roomPersonas\u0022: {},\n  \u0022providers\u0022: [\n    {\n      \u0022id\u0022: \u0022codex\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    },\n    {\n      \u0022id\u0022: \u0022grok\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    },\n    {\n      \u0022id\u0022: \u0022claude\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    }\n  ]\n}",
+  "settingsLegacyResaved": "{\n  \u0022selfId\u0022: \u0022\u0022,\n  \u0022trigger\u0022: \u0022@예전봇\u0022,\n  \u0022pollSeconds\u0022: 7,\n  \u0022imageGptModel\u0022: \u0022gpt-6-astra\u0022,\n  \u0022imageGrokModel\u0022: \u0022grok-4.7\u0022,\n  \u0022replyMode\u0022: \u0022trigger\u0022,\n  \u0022roomReplyModes\u0022: {},\n  \u0022selectedBotRooms\u0022: [],\n  \u0022autoKnowledge\u0022: {\n    \u0022enabled\u0022: false,\n    \u0022intervalMinutes\u0022: 30,\n    \u0022autoSave\u0022: true,\n    \u0022rooms\u0022: []\n  },\n  \u0022summaryForwards\u0022: [],\n  \u0022selectedChatRoom\u0022: null,\n  \u0022provider\u0022: \u0022grok\u0022,\n  \u0022contextMessages\u0022: 100,\n  \u0022timeoutSeconds\u0022: 180,\n  \u0022grokDelegationEnabled\u0022: false,\n  \u0022grokTimeoutSeconds\u0022: 600,\n  \u0022persona\u0022: {\n    \u0022name\u0022: \u0022예전봇\u0022,\n    \u0022role\u0022: \u0022r\u0022,\n    \u0022tone\u0022: \u0022t\u0022,\n    \u0022style\u0022: \u0022s\u0022,\n    \u0022instructions\u0022: \u0022i\u0022\n  },\n  \u0022personas\u0022: [\n    {\n      \u0022id\u0022: \u0022default\u0022,\n      \u0022label\u0022: \u0022기본\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022예전봇\u0022,\n        \u0022role\u0022: \u0022r\u0022,\n        \u0022tone\u0022: \u0022t\u0022,\n        \u0022style\u0022: \u0022s\u0022,\n        \u0022instructions\u0022: \u0022i\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    },\n    {\n      \u0022id\u0022: \u0022work\u0022,\n      \u0022label\u0022: \u0022업무\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022업무 도우미\u0022,\n        \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n        \u0022tone\u0022: \u0022정중하고 간결한 존댓말\u0022,\n        \u0022style\u0022: \u0022할 일과 결론부터 명확하게 정리한다.\u0022,\n        \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    },\n    {\n      \u0022id\u0022: \u0022friend\u0022,\n      \u0022label\u0022: \u0022친구\u0022,\n      \u0022persona\u0022: {\n        \u0022name\u0022: \u0022친구\u0022,\n        \u0022role\u0022: \u0022대화 맥락을 이해하고 필요한 답변과 업무 정리를 돕는 AI 챗봇\u0022,\n        \u0022tone\u0022: \u0022따뜻하고 편안한 말투\u0022,\n        \u0022style\u0022: \u0022상대방의 감정에 공감하고 자연스럽게 대화한다.\u0022,\n        \u0022instructions\u0022: \u0022대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.\u0022\n      },\n      \u0022attachImages\u0022: false,\n      \u0022knowledge\u0022: {\n        \u0022enabled\u0022: false,\n        \u0022vaultPath\u0022: \u0022\u0022\n      }\n    }\n  ],\n  \u0022roomPersonas\u0022: {},\n  \u0022providers\u0022: [\n    {\n      \u0022id\u0022: \u0022codex\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    },\n    {\n      \u0022id\u0022: \u0022grok\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    },\n    {\n      \u0022id\u0022: \u0022claude\u0022,\n      \u0022enabled\u0022: true,\n      \u0022executable\u0022: \u0022\u0022,\n      \u0022model\u0022: \u0022\u0022,\n      \u0022effort\u0022: \u0022default\u0022\n    }\n  ]\n}"
+}

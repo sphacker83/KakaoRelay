@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>KakaoRelay</title>
+<link rel="stylesheet" href="style.css">
+<script src="core.js" defer></script>
+<script src="messages.js" defer></script>
+<script src="ai.js" defer></script>
+<script src="images.js" defer></script>
+<script src="forward.js" defer></script>
+<script src="control.js" defer></script>
+<script src="knowledge.js" defer></script>
+<script src="main.js" defer></script>
+</head>
+<body>
+<div id="permissions" class="permissions hidden" role="status">
+  <div class="perm-head"><strong>macOS 권한 확인</strong><button id="permRefresh" class="small">다시 확인</button></div>
+  <div id="permItems"></div>
+</div>
+<nav class="tabs top" data-group="main">
+  <button data-tab="tab-ai" class="active">AI 챗봇</button>
+  <button data-tab="tab-messages">메시지</button>
+  <button data-tab="tab-api">API</button>
+  <button data-tab="tab-knowledge">지식베이스</button>
+</nav>
+<main>
+<!-- AI 챗봇 -->
+<section id="tab-ai" class="page" data-group="main">
+  <div class="ai-head">
+    <img id="avatar" class="avatar hidden" alt="">
+    <h1>AI 챗봇</h1>
+    <button id="aiSave">설정 저장</button>
+  </div>
+  <nav class="tabs sub" data-group="ai">
+    <button data-tab="ai-reply" class="active">자동답장</button>
+    <button data-tab="ai-persona">페르소나</button>
+    <button data-tab="ai-providers">프로바이더</button>
+    <button data-tab="ai-analysis">대화분석</button>
+    <button data-tab="ai-forward">정리감시</button>
+    <button data-tab="ai-control">제어방</button>
+  </nav>
+  <div class="subpages">
+    <!-- 자동답장 -->
+    <section id="ai-reply" class="page col" data-group="ai">
+      <div class="row end" id="botConfig">
+        <label class="w76">폴링(초)<input id="pollSeconds" aria-label="대화방 폴링 간격"></label>
+        <label class="grow">카카오 ID<input id="selfId" aria-label="내 카카오 사용자 ID"></label>
+        <button id="botRoomsRefresh">방 새로고침</button>
+      </div>
+      <ul id="botRooms" class="list grow" role="listbox" aria-multiselectable="true" title="열린 방 중 자동답장할 방을 선택하세요."></ul>
+      <div class="row end" id="bindRow">
+        <label class="grow">봇<select id="bindPersona" aria-label="연결할 봇"></select></label>
+        <label class="w132">답변 방식<select id="bindMode" aria-label="선택한 방의 답변 방식">
+          <option value="immediate">즉시 답변</option><option value="trigger">호출어 답변</option><option value="context">맥락 판단</option>
+        </select></label>
+        <button id="bindButton">연결</button>
+      </div>
+      <div class="row">
+        <label class="check grow" title="오전(0~12시)·오후(12~24시) 구간마다 이 방에서 처음 말한 사람에게 🤖 이름 두 글자 + 안녕!(82년생 이상·연도 없음은 안녕하세요)을 보냅니다."><input type="checkbox" id="bindGreeting">선택한 방 자동인사</label>
+      </div>
+      <div class="row">
+        <button id="botStart" class="primary grow">자동답장 시작</button>
+        <button id="botStop">중지</button>
+      </div>
+      <div id="botStatuses" class="statuses"></div>
+    </section>
+    <!-- 페르소나 -->
+    <section id="ai-persona" class="page col hidden" data-group="ai">
+      <label>편집할 페르소나 · 3개를 미리 설정하세요<select id="editPersona"></select></label>
+      <nav class="tabs sub plain" data-group="persona">
+        <button data-tab="persona-text" class="active">성격 · 지침</button>
+        <button data-tab="persona-images">이미지</button>
+      </nav>
+      <section id="persona-text" class="page scroll" data-group="persona">
+        <label>봇 이름</label>
+        <div class="row"><input id="pName" class="grow"><label class="check" title="감정이 드러나는 답변에만 감정 이미지를 보냅니다. 감정 없는 답변은 방별로 오늘 첫 답장일 때만 기본 이미지를 보냅니다."><input type="checkbox" id="pAttach">이미지 첨부</label></div>
+        <label>역할<input id="pRole"></label>
+        <label>말투<input id="pTone"></label>
+        <label>대화 성향 · 답변 길이<textarea id="pStyle" rows="3"></textarea></label>
+        <label>추가 지침<textarea id="pInstructions" rows="5"></textarea></label>
+      </section>
+      <section id="persona-images" class="page col hidden" data-group="persona">
+        <div class="scroll grow">
+          <h2>페르소나 이미지 · 관리자</h2>
+          <p class="muted small">이 앱에서만 생성·변경합니다. 대화 명령과 발송 API로는 이미지를 바꿀 수 없습니다.</p>
+          <div class="row"><select id="imgProvider" class="grow" aria-label="이미지 버전"><option value="astra">GPT · Codex CLI</option><option value="grok">Grok CLI</option></select><button id="imgApply" class="two">이 버전<br>적용</button></div>
+          <p id="imgApplied" class="accent strong">적용된 이미지 없음</p>
+          <details><summary>이미지 생성 CLI</summary>
+            <p class="strong">GPT · Codex CLI + imagegen</p><input id="imgGptModel" aria-label="GPT 이미지 생성 담당 모델">
+            <p class="strong">Grok CLI · 내장 이미지 생성/편집</p><input id="imgGrokModel" aria-label="Grok 이미지 생성 담당 모델">
+            <p class="muted small">로그인된 CLI 계정을 사용합니다. 실행 파일 경로는 프로바이더 설정을 따릅니다. API 키는 사용하지 않습니다.</p>
+          </details>
+          <label>기준 이미지 방향 (선택)<textarea id="imgDirection" rows="2">작은 채팅 이미지에서도 표정이 잘 보이는 개성 있는 캐릭터</textarea></label>
+          <button id="imgReference" class="two">기준 이미지<br>스스로 만들기</button>
+          <p class="muted small">저장된 페르소나로 자신의 외형을 정합니다. 새 기준은 후보로 보관하며, 채택할 때 해당 버전의 표정 선택이 초기화됩니다.</p>
+          <div class="previews">
+            <div><p class="strong">현재 기준</p><div class="preview"><img id="imgRefPreview" alt=""></div></div>
+            <div><p class="strong">선택한 후보</p><div class="preview"><img id="imgSelPreview" alt=""></div></div>
+          </div>
+          <div class="row wrap">
+            <select id="imgExpression" class="w80"></select>
+            <button id="imgGenerate" class="two">이 감정<br>생성·재생성</button>
+            <button id="imgMissing" class="two">없는 감정<br>모두 생성</button>
+          </div>
+          <p class="muted small">기본 · 기쁨 · 슬픔 · 놀람 · 화남 · 생각 · 응원. 모든 재생성은 현재 기준 이미지를 참조하며 기존 결과를 보관합니다.</p>
+          <ul id="imgList" class="thumbs" role="listbox"></ul>
+          <p id="imgDetail" class="muted small">후보를 선택해 비교하세요.</p>
+          <details id="imgMagenta"><summary>마젠타 투명화</summary>
+            <div class="row"><span id="imgTolText" class="w28">30</span><input type="range" id="imgTolerance" min="0" max="100" step="1" value="30" class="grow" aria-label="마젠타 색상 허용 오차"><button id="imgTransparent">적용</button></div>
+          </details>
+          <details id="imgPromptBox"><summary>생성 프롬프트</summary>
+            <textarea id="imgPrompt" rows="7" readonly aria-label="선택 이미지 생성 프롬프트">저장된 프롬프트 없음</textarea>
+            <div class="row right"><button id="imgCopyPrompt">복사</button></div>
+          </details>
+          <div class="row wrap">
+            <button id="imgUse" class="two">선택 이미지<br>채택</button>
+            <button id="imgDelete" class="two">선택 이미지<br>삭제</button>
+            <button id="imgFolder" class="two">이미지 폴더<br>열기</button>
+          </div>
+        </div>
+        <div class="activity row">
+          <div class="grow"><p id="imgStatus" aria-live="polite">페르소나를 선택하고 기준 이미지를 만들어 주세요.</p><div id="imgProgress" class="progress hidden"></div></div>
+          <button id="imgCancel" class="two">작업<br>중지</button>
+        </div>
+      </section>
+    </section>
+    <!-- 프로바이더 -->
+    <section id="ai-providers" class="page scroll hidden" data-group="ai">
+      <label class="check" title="일상 대화는 Codex 모델이 담당하고, 어려운 요청만 Grok에 맡깁니다."><input type="checkbox" id="grokDelegation">Codex 대화 · Grok 백그라운드 위임</label>
+      <label>먼저 사용할 프로바이더<select id="provider"><option>auto</option><option>codex</option><option>grok</option><option>claude</option></select></label>
+      <p class="muted small">auto는 Codex부터, 직접 선택하면 해당 프로바이더부터 시작합니다. 실패하면 Codex → Grok → Claude → Codex 순환으로 최대 2회전 후 종료합니다. 사용 안 함은 건너뜁니다.</p>
+      <div id="providerCards"></div>
+      <p class="muted small">지원하는 모델과 effort는 CLI 버전·로그인 계정에 따라 다릅니다. Grok은 xAI Grok Build, Claude는 Claude Code를 사용합니다.</p>
+      <div class="row">
+        <span>메시지 수</span><input id="contextMessages" class="grow">
+        <span>제한(초)</span><input id="timeoutSeconds" class="grow">
+      </div>
+      <button id="detect">설치·모델 목록 새로고침</button>
+      <pre id="cliInfo" class="small"></pre>
+    </section>
+    <!-- 대화분석 -->
+    <section id="ai-analysis" class="page col hidden" data-group="ai">
+      <div class="row">
+        <select id="chatRoom" class="grow" aria-label="AI 대화방"></select>
+        <button id="chatRoomsRefresh">방 새로고침</button>
+      </div>
+      <div class="row">
+        <span id="contextHint" class="muted small grow">카카오톡에서 원하는 방을 열고 방 새로고침을 누르세요.</span>
+        <button id="importChat" title="카카오톡 한국어 TXT 또는 KakaoRelay JSON · 파일은 이 앱 메모리에서 읽습니다.">대화 파일 가져오기</button>
+        <button id="readChat">대화 읽기</button>
+        <button id="exportChat">JSON 저장</button>
+      </div>
+      <textarea id="transcript" class="grow small soft" readonly aria-label="읽은 대화"></textarea>
+      <label class="muted small">질문 · 답변에 반영할 요청 (선택)<textarea id="question" rows="2" aria-label="AI 질문"></textarea></label>
+      <div class="row wrap">
+        <button data-mode="analyze">대화 분석</button>
+        <button data-mode="reply">답변 만들기</button>
+        <button data-mode="chat">질문하기</button>
+        <button id="aiCancel">취소</button>
+      </div>
+      <div class="answer grow">
+        <textarea id="answer" aria-label="AI 응답"></textarea>
+        <p id="answerWaiting" class="waiting hidden">응답을 기다리는 중입니다. 완료되면 여기에 표시됩니다.</p>
+      </div>
+      <button id="saveNote" class="self-start" title="대화 분석 결과를 검토·수정한 뒤 해당 방의 페르소나 보관함에 저장합니다.">요약을 노트로 저장</button>
+      <div class="row">
+        <span class="muted tiny grow">선택한 방의 최근 대화가 선택된 AI 서비스로 전달됩니다. 자동 선택은 Codex → Grok → Claude 순서입니다.</span>
+        <button id="compose">발송란으로 가져오기</button>
+      </div>
+    </section>
+    <!-- 정리감시 -->
+    <section id="ai-forward" class="page col hidden" data-group="ai">
+      <div class="row">
+        <select id="fwdRules" class="grow" aria-label="정리 전달 규칙"></select>
+        <button id="fwdDelete">삭제</button>
+        <button id="fwdNew">새 규칙</button>
+      </div>
+      <div class="row"><span class="grow">감시할 방 · 자동답장과 별도</span><button id="fwdRefresh">방 새로고침</button></div>
+      <ul id="fwdSources" class="list grow"></ul>
+      <div class="row end">
+        <label class="grow">전달받을 방<select id="fwdDestination" aria-label="요약 수신방"></select></label>
+        <label class="w78">주기(분)<input id="fwdInterval" aria-label="요약 전달 주기"></label>
+      </div>
+      <div class="row">
+        <label class="check grow"><input type="checkbox" id="fwdEnabled">추가사항이 있을 때 전달</label>
+        <button id="fwdApply">적용</button>
+      </div>
+      <p id="fwdStatus" class="small clamp">원본 방·수신방·주기를 지정하고 적용하세요. 처음 켠 이후의 새 대화부터 전달합니다.</p>
+    </section>
+    <!-- 제어방 -->
+    <section id="ai-control" class="page col hidden" data-group="ai">
+      <div class="row"><label class="check grow"><input type="checkbox" id="ctlEnabled">제어방 사용</label><button id="ctlRefresh">새로고침</button></div>
+      <select id="ctlRoom" aria-label="단일 1:1 제어방"></select>
+      <p id="ctlOperator" class="small">일반 1:1 방을 선택하세요.</p>
+      <label class="check"><input type="checkbox" id="ctlNatural">자연어 명령 · 변경 전 확인</label>
+      <div class="row wrap">
+        <label class="check"><input type="checkbox" id="ctlReply">자동답장</label>
+        <label class="check"><input type="checkbox" id="ctlKnowledge">지식 축적</label>
+        <label class="check"><input type="checkbox" id="ctlForward">정리전달</label>
+        <label class="check"><input type="checkbox" id="ctlProvider">프로바이더</label>
+      </div>
+      <div class="row"><span class="small grow">일반 대화 + 관리 명령 · 1:1 방 하나</span><button id="ctlApply">적용</button></div>
+      <p id="ctlStatus">제어방 꺼짐</p>
+      <nav class="tabs sub plain" data-group="ctl">
+        <button data-tab="ctl-history" class="active">이력</button>
+        <button data-tab="ctl-help">명령어</button>
+      </nav>
+      <textarea id="ctl-history" class="page grow" data-group="ctl" readonly></textarea>
+      <textarea id="ctl-help" class="page grow hidden" data-group="ctl" readonly></textarea>
+    </section>
+  </div>
+  <div class="activity">
+    <div id="aiProgress" class="progress hidden"></div>
+    <p id="aiActivity" class="ellipsis" aria-live="polite">설정 준비 중</p>
+  </div>
+</section>
+
+<!-- 메시지 -->
+<section id="tab-messages" class="page col hidden" data-group="main">
+  <div class="compose">
+    <div class="row"><strong class="grow">받는 대화방</strong><span id="charCount" class="muted small">0자</span></div>
+    <div class="row">
+      <select id="targets" class="grow" aria-label="받는 대화방"></select>
+      <button id="targetsRefresh" class="icon" title="열린 대화방 새로고침" aria-label="대화방 새로고침">↻</button>
+    </div>
+    <p id="targetHint" class="muted small">카카오톡에서 대화방을 열고 위에서 선택하세요.</p>
+    <textarea id="messageBody" class="body grow" aria-label="보낼 메시지"></textarea>
+    <div class="row">
+      <button id="observeCurrent" class="hidden">대화 확인 완료</button>
+      <span class="grow"></span>
+      <button id="sendButton" class="primary w88">보내기</button>
+    </div>
+    <div id="sendProgress" class="progress thin hidden"></div>
+    <div id="sendResult" class="hidden">
+      <p id="sendStatus" class="strong">새 메시지</p>
+      <p id="sendDetail" class="muted small">받는 대화방과 본문을 확인한 뒤 보내기를 누르세요.</p>
+    </div>
+  </div>
+  <div class="history col grow">
+    <div class="row"><strong class="grow">발송 이력</strong><button id="historyRefresh">새로고침</button></div>
+    <div class="grid grow">
+      <table><thead><tr><th class="w100">시간</th><th>대화방</th><th class="w115">상태</th></tr></thead><tbody id="historyRows"></tbody></table>
+    </div>
+    <p id="historyHint" class="muted small">대화 확인은 실제 새 말풍선을 확인한 경우에만 기록하세요.</p>
+    <div class="row"><button id="historyFolder">기록 폴더</button><span class="grow"></span><button id="observeHistory">선택한 발송 대화 확인 완료</button></div>
+  </div>
+</section>
+
+<!-- API -->
+<section id="tab-api" class="page scroll hidden" data-group="main">
+  <p id="apiStatus" class="strong">AI 연결 준비 중</p>
+  <p class="muted">AI는 대화방과 본문을 API로 전달합니다. 앱이 켜져 있으면 게이트웨이도 함께 실행됩니다.</p>
+  <div class="row right"><button data-copy="usage">사용법 복사</button></div>
+  <details><summary>사용법 · 예제 펼치기</summary><textarea id="apiDocs" class="doc soft" readonly aria-label="API 사용법과 예제"></textarea></details>
+  <div class="row right"><button data-copy="openapi">OpenAPI 복사</button></div>
+  <details><summary>OpenAPI · JSON 펼치기</summary><textarea id="openApi" class="doc soft mono" readonly wrap="off" aria-label="OpenAPI JSON 명세"></textarea></details>
+  <p id="apiCopyStatus" class="muted small" aria-live="polite">내용을 선택해 복사하거나 복사 버튼으로 전체를 복사하세요.</p>
+  <hr>
+  <div class="row"><strong id="diagTitle" class="grow">연결 진단</strong><button id="diagnose">진단 시작</button></div>
+  <p id="diagSummary" class="muted">문제가 있을 때 창과 자동화 기능을 확인합니다.</p>
+  <div id="diagPermissions" class="perm-list hidden"></div>
+  <details id="diagPanel"><summary>진단 세부 정보</summary>
+    <div class="grid h140"><table><thead><tr><th>창</th><th class="w180">상태</th></tr></thead><tbody id="diagWindows"></tbody></table></div>
+    <div class="grid h120"><table><thead><tr><th>컨트롤</th><th class="w140">기능</th></tr></thead><tbody id="diagControls"></tbody></table></div>
+    <div class="row right"><button id="openReport">결과 파일</button></div>
+  </details>
+  <p id="version" class="muted tiny">v0.10.0 · KakaoRelay</p>
+</section>
+
+<!-- 지식베이스 -->
+<section id="tab-knowledge" class="page col hidden" data-group="main">
+  <div class="row"><span class="nowrap">사용할 봇</span><select id="kbPersona" class="grow" aria-label="지식베이스 봇"></select></div>
+  <p id="kbConnection" class="muted small">봇을 선택하세요.</p>
+  <nav class="tabs sub" data-group="kb">
+    <button data-tab="kb-files" class="active">자료</button>
+    <button data-tab="kb-auto">대화 자동 정리</button>
+    <button data-tab="kb-settings">연결 설정</button>
+  </nav>
+  <div class="subpages">
+    <section id="kb-files" class="page col" data-group="kb">
+      <div class="row"><button id="kbUpload" class="primary">자료 추가</button><button id="kbWrite">직접 쓰기</button><span class="grow"></span><button id="kbRefresh">새로고침</button></div>
+      <div id="kbDrop" class="drop">
+        <p class="strong">파일을 여기에 끌어 놓으세요</p>
+        <p class="muted small">MD · TXT · PDF · Word(DOCX), 파일당 20MB<br>텍스트를 노트로 저장합니다. 스캔 PDF는 문자 인식이 필요합니다.</p>
+      </div>
+      <div class="row"><input id="kbQuery" class="grow" aria-label="지식 검색어" title="관련 내용을 검색합니다. AI 호출 없이 로컬에서 확인합니다."><button id="kbSearch">검색</button></div>
+      <ul id="kbNotes" class="list h140" aria-label="지식 노트 목록"></ul>
+      <div class="row"><span id="kbLibraryHint" class="muted small grow">노트를 불러오세요</span><button id="kbEdit" class="small">옵시디언에서 편집</button></div>
+      <textarea id="kbPreview" class="grow soft" readonly aria-label="지식 내용 미리보기">자료를 추가하거나 노트를 선택하세요.</textarea>
+    </section>
+    <section id="kb-auto" class="page scroll hidden" data-group="kb">
+      <p class="strong">프로젝트 · 업무 지식 · 할 일 자동 정리</p>
+      <p class="muted small">새 대화를 분류하고 현재 노트를 갱신합니다. 근거와 변경 이력은 따로 보관합니다.</p>
+      <label class="check"><input type="checkbox" id="akEnabled">대화 자동 정리 사용</label>
+      <div class="row"><span>정리 주기(분)</span><input id="akInterval" class="w60" aria-label="대화 자동 정리 주기"><span class="grow"></span><button id="akRefresh">방 새로고침</button></div>
+      <ul id="akRooms" class="list h120" aria-label="자동 정리할 대화방"></ul>
+      <label class="check"><input type="checkbox" id="akAutoSave">확인된 내용은 지식으로 바로 저장</label>
+      <p class="muted tiny">명시된 변경은 반영하고, 불확실한 충돌은 검토함에 보관합니다. 해제하면 모두 검토 대상으로 저장합니다.</p>
+      <div class="row wrap"><button id="akApply" class="primary">설정 적용</button><button id="akRun">지금 정리</button><button id="akReview">검토 폴더</button></div>
+      <p class="muted tiny">방에 연결된 봇의 보관함에 저장합니다. 새 대화와 짧은 근거 인용이 선택된 AI 서비스로 전달됩니다.</p>
+      <textarea id="akStatus" class="status-box" readonly aria-label="대화 자동 정리 상태">자동 정리가 꺼져 있습니다.</textarea>
+    </section>
+    <section id="kb-settings" class="page scroll hidden" data-group="kb">
+      <p class="strong">옵시디언 보관함</p>
+      <p>봇이 읽을 노트가 있는 폴더를 선택하세요. 같은 폴더를 여러 봇과 공유할 수 있습니다.</p>
+      <textarea id="kbVault" rows="2" aria-label="옵시디언 보관함 경로"></textarea>
+      <div class="row wrap"><button id="kbFolder">폴더 선택</button><button id="kbCreateVault">새 보관함</button><button id="kbOpenFolder">폴더 열기</button></div>
+      <label class="check spaced"><input type="checkbox" id="kbEnabled">이 봇의 답변에 지식 노트 사용</label>
+      <div class="row wrap"><button id="kbSave" class="primary">연결 저장</button><button id="kbSaveAll">모든 봇에 같은 연결 적용</button></div>
+      <p class="muted small">관련 노트 발췌는 답변 생성 시 선택된 AI 서비스에 전달됩니다. 수정·삭제는 다음 질문부터 반영됩니다.</p>
+      <hr>
+      <p class="strong">옵시디언 · 백업</p>
+      <button id="kbObsidian">옵시디언 열기</button>
+      <p>봇은 옵시디언이 꺼져 있어도 노트를 읽습니다. GitHub 백업을 설정한 보관함은 옵시디언을 켜 두면 설정한 주기에 따라 백업됩니다.</p>
+      <p>대화를 계속 지식으로 쌓으려면 ‘대화 자동 정리’ 탭에서 방과 주기를 설정하세요. 이전 대화는 AI 챗봇 → 대화분석 → 요약을 노트로 저장으로 추가할 수 있습니다.</p>
+    </section>
+  </div>
+  <div class="activity row">
+    <p id="kbStatus" class="grow small clamp" aria-live="polite">자료는 이 컴퓨터의 보관함에 저장됩니다.</p>
+    <button id="kbCancel" class="small">취소</button>
+  </div>
+</section>
+</main>
+<footer class="badge-row"><span id="badge" class="badge">○ 자동답장 꺼짐</span></footer>
+
+<dialog id="writeDialog" aria-label="지식 노트 직접 쓰기">
+  <form method="dialog" class="col">
+    <h2>지식 노트 직접 쓰기</h2>
+    <label>제목<input id="wdTitle" maxlength="200" aria-label="새 지식 노트 제목"></label>
+    <textarea id="wdBody" class="grow" maxlength="100000" aria-label="새 지식 노트 내용"></textarea>
+    <p id="wdHint">제목과 내용을 적거나 붙여 넣으세요.</p>
+    <div class="row right"><button value="cancel" formnovalidate>취소</button><button id="wdSave" value="save" class="primary">노트 저장</button></div>
+  </form>
+</dialog>
+</body>
+</html>
