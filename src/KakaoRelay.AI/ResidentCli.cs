@@ -17,9 +17,10 @@ internal sealed class ResidentCliPool : IDisposable
     private readonly Dictionary<string, Entry> entries = [];
     private readonly CancellationTokenSource shutdown = new();
     private bool disposed;
-    public async Task<(string Text, string SessionId)> RunAsync(AiProviderSettings provider, string prompt, int seconds, CancellationToken cancellation, string folder, string? sessionId)
+    public async Task<(string Text, string SessionId)> RunAsync(AiProviderSettings provider, string prompt, int seconds, CancellationToken cancellation, string folder, string? sessionId, IReadOnlyList<AgentAttachment>? attachments = null)
     {
-        var key = Path.GetFullPath(folder) + "|" + JsonSerializer.Serialize(provider);
+        var fileTools = provider.Id == "codex" && (attachments?.Any(f => f.MediaType == "application/pdf") ?? false);
+        var key = Path.GetFullPath(folder) + "|" + JsonSerializer.Serialize(provider) + "|" + fileTools;
         Entry entry;
         lock (sync)
         {
@@ -43,7 +44,7 @@ internal sealed class ResidentCliPool : IDisposable
             if (entry.Session is null)
             {
                 Directory.CreateDirectory(folder);
-                var started = new ResidentCliSession(provider, folder, sessionId);
+                var started = new ResidentCliSession(provider, folder, sessionId, fileTools);
                 // Publish before initialization so shutdown can also stop a starting process.
                 lock (sync)
                 {
@@ -52,7 +53,7 @@ internal sealed class ResidentCliPool : IDisposable
                 }
                 await started.InitializeAsync(timeout.Token).ConfigureAwait(false);
             }
-            return await entry.Session.RunAsync(prompt, timeout.Token).ConfigureAwait(false);
+            return await entry.Session.RunAsync(prompt, timeout.Token, attachments ?? []).ConfigureAwait(false);
         }
         catch (Exception) when (timeout.IsCancellationRequested)
         {
@@ -85,14 +86,16 @@ internal sealed class ResidentCliSession : IDisposable
     private readonly string folder;
     private readonly CliJsonPipe pipe;
     private readonly string? resumeId;
+    private readonly bool fileTools;
     public string SessionId { get; private set; }
     public bool Alive => pipe.Alive;
-    public ResidentCliSession(AiProviderSettings provider, string folder, string? sessionId)
+    public ResidentCliSession(AiProviderSettings provider, string folder, string? sessionId, bool fileTools = false)
     {
+        this.fileTools = fileTools;
         this.provider = provider; this.folder = Path.GetFullPath(folder); resumeId = sessionId;
         SessionId = sessionId ?? Guid.NewGuid().ToString();
         var exe = CliAiRunner.Resolve(provider) ?? throw new InvalidOperationException("CLI 실행 파일 없음");
-        pipe = new(exe, this.folder, CliAiRunner.ResidentArguments(provider, sessionId, SessionId), provider.Id);
+        pipe = new(exe, this.folder, CliAiRunner.ResidentArguments(provider, sessionId, SessionId, fileTools), provider.Id);
     }
     public async Task InitializeAsync(CancellationToken ct)
     {
@@ -100,7 +103,8 @@ internal sealed class ResidentCliSession : IDisposable
         await pipe.CallAsync("initialize", new { clientInfo = new { name = "kakaorelay", version = "1.0.0" } }, ct).ConfigureAwait(false);
         await pipe.SendAsync(new { method = "initialized", @params = new { } }, ct).ConfigureAwait(false);
         var configuration = await pipe.CallAsync("config/read", new { includeLayers = false }, ct).ConfigureAwait(false);
-        var overrides = new Dictionary<string, object> { ["features.shell_tool"] = false, ["web_search"] = "live" };
+        var overrides = new Dictionary<string, object> { ["features.shell_tool"] = fileTools, ["web_search"] = "live", ["sandbox_mode"] = fileTools ? "workspace-write" : "read-only" };
+        if (fileTools && OperatingSystem.IsWindows()) overrides["windows.sandbox"] = "unelevated";
         if (provider.Effort != "default") overrides["model_reasoning_effort"] = provider.Effort;
         // Disable inherited integrations for this chatbot thread, without editing user config.
         if (configuration.TryGetProperty("config", out var config))
@@ -116,7 +120,7 @@ internal sealed class ResidentCliSession : IDisposable
         var parameters = new Dictionary<string, object?>
         {
             ["model"] = string.IsNullOrWhiteSpace(provider.Model) ? null : provider.Model,
-            ["cwd"] = folder, ["approvalPolicy"] = "never", ["sandbox"] = "read-only", ["config"] = overrides
+            ["cwd"] = folder, ["approvalPolicy"] = "never", ["sandbox"] = fileTools ? "workspace-write" : "read-only", ["config"] = overrides
         };
         if (resumeId is not null) parameters["threadId"] = resumeId;
         var response = await pipe.CallAsync(resumeId is null ? "thread/start" : "thread/resume", parameters, ct).ConfigureAwait(false);
@@ -124,11 +128,11 @@ internal sealed class ResidentCliSession : IDisposable
         if (string.IsNullOrWhiteSpace(actual) || (resumeId is not null && actual != resumeId)) throw new InvalidOperationException("Codex 세션 ID가 일치하지 않습니다.");
         SessionId = actual;
     }
-    public async Task<(string Text, string SessionId)> RunAsync(string prompt, CancellationToken ct)
+    public async Task<(string Text, string SessionId)> RunAsync(string prompt, CancellationToken ct, IReadOnlyList<AgentAttachment> attachments)
     {
         if (provider.Id == "claude")
         {
-            await pipe.SendAsync(new { type = "user", session_id = SessionId, message = new { role = "user", content = prompt }, parent_tool_use_id = (string?)null }, ct).ConfigureAwait(false);
+            await pipe.SendAsync(new { type = "user", session_id = SessionId, message = new { role = "user", content = attachments.Count == 0 ? (object)prompt : await AgentAttachment.ClaudeInputAsync(prompt, attachments, ct) }, parent_tool_use_id = (string?)null }, ct).ConfigureAwait(false);
             while (true)
             {
                 var evt = await pipe.ReadAsync(ct).ConfigureAwait(false);
@@ -168,7 +172,7 @@ internal sealed class ResidentCliSession : IDisposable
             }
         }
         await pipe.CallAsync("turn/start", new { threadId = SessionId, model = string.IsNullOrWhiteSpace(provider.Model) ? null : provider.Model,
-            effort = provider.Effort == "default" ? null : provider.Effort, input = new[] { new { type = "text", text = prompt } } }, ct, Observe).ConfigureAwait(false);
+            effort = provider.Effort == "default" ? null : provider.Effort, input = AgentAttachment.CodexInput(prompt, attachments) }, ct, Observe).ConfigureAwait(false);
         while (!complete) Observe(await pipe.ReadAsync(ct).ConfigureAwait(false));
         if (failure is not null) throw new InvalidOperationException(failure);
         if (string.IsNullOrWhiteSpace(text.ToString())) throw new InvalidOperationException("Codex 최종 응답 없음");

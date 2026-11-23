@@ -19,6 +19,7 @@ public sealed class SummaryForwarder(AiService ai, Func<ApiSendCommand, Cancella
         public List<SummaryUpdate> History { get; set; } = [];
         public Dictionary<string, string> LatestFacts { get; set; } = [];
         public Pending? Pending { get; set; }
+        public Dictionary<string, string> SourceErrors { get; set; } = [];
     }
     public sealed record Pending(string RequestId, string Text, List<SummaryUpdate> Items, Dictionary<string, string> Cursors, bool Dispatching = false);
     private static string Identity(SummaryForwardRule r) => AiConversation.Hash(PromptJson.Serialize(new
@@ -52,7 +53,8 @@ public sealed class SummaryForwarder(AiService ai, Func<ApiSendCommand, Cancella
         var now = time.GetUtcNow();
         if (state.Pending?.Dispatching == true)
         { Report(rule, "전송 결과 확인 필요 · 재발송 중단 · 발송 이력 확인 후 규칙을 껐다 켜세요."); return; }
-        if (state.Cursors.Count > 0 && now - state.LastRun < TimeSpan.FromMinutes(rule.IntervalMinutes)) return;
+        if (state.LastRun != default && now - state.LastRun < TimeSpan.FromMinutes(rule.IntervalMinutes)) return;
+        void ReportStatus(string message) => Report(rule, message + (state.SourceErrors.Count == 0 ? "" : " · 읽기 실패: " + string.Join(" / ", rule.Sources.Where(s => state.SourceErrors.ContainsKey(s.Key)).Select(s => s.Title + ": " + state.SourceErrors[s.Key]))));
         if (state.Pending is null)
         {
             await ai.Chats.RoomsAsync(ct);
@@ -60,29 +62,46 @@ public sealed class SummaryForwarder(AiService ai, Func<ApiSendCommand, Cancella
             var baseline = state.Cursors.Count == 0;
             foreach (var source in rule.Sources)
             {
-                var context = await ai.Chats.ReadAsync(source.Profile, source.Id, baseline ? 1 : 500, ct);
-                var messages = context.Messages.OrderBy(m => BigInteger.Parse(m.Id)).ToList();
-                var latest = messages.LastOrDefault()?.Id ?? "0";
-                if (baseline) { state.Cursors[source.Key] = latest; continue; }
-                var cursor = state.Cursors[source.Key];
-                if (BigInteger.Parse(latest) < BigInteger.Parse(cursor)
-                    || messages.Count == 500 && BigInteger.Parse(messages[0].Id) > BigInteger.Parse(cursor))
-                    throw new IOException(source.Title + " · 처리 위치와 조회 범위가 맞지 않습니다. 주기를 줄이고 규칙을 껐다 켜세요.");
-                inputs.AddRange(messages.Where(m => BigInteger.Parse(m.Id) > BigInteger.Parse(cursor)).Select(m => new SummaryInput(source.Key, m)));
+                try
+                {
+                    var initialized = state.Cursors.TryGetValue(source.Key, out var cursor);
+                    var context = await ai.Chats.ReadAsync(source.Profile, source.Id, initialized ? 500 : 1, ct);
+                    var messages = context.Messages.OrderBy(m => BigInteger.Parse(m.Id)).ToList();
+                    var latest = messages.LastOrDefault()?.Id ?? "0";
+                    if (!initialized) state.Cursors[source.Key] = latest;
+                    else
+                    {
+                        if (BigInteger.Parse(latest) < BigInteger.Parse(cursor!)
+                            || messages.Count == 500 && BigInteger.Parse(messages[0].Id) > BigInteger.Parse(cursor!))
+                            throw new IOException("처리 위치와 조회 범위가 맞지 않습니다. 주기를 줄이고 규칙을 껐다 켜세요.");
+                        inputs.AddRange(messages.Where(m => BigInteger.Parse(m.Id) > BigInteger.Parse(cursor!)).Select(m => new SummaryInput(source.Key, m)));
+                    }
+                    state.SourceErrors.Remove(source.Key);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception error)
+                {
+                    // Keep this room's cursor unchanged; other sources can still progress.
+                    state.SourceErrors[source.Key] = error.Message;
+                }
             }
             if (baseline)
             {
                 state.LastRun = now; Save(path, state);
-                Report(rule, "시작 기준 저장 · 이후 새 대화부터 정리"); return;
+                ReportStatus("읽을 수 있는 방의 시작 기준 저장 · 이후 새 대화부터 정리"); return;
             }
             // Process a bounded prefix, retaining all remaining messages for subsequent intervals.
             var batch = inputs.OrderBy(i => BigInteger.Parse(i.Message.Id)).ThenBy(i => i.Source).Take(100).ToList();
+            var attachmentCount = 0;
+            batch = batch.TakeWhile(i => i.Message.Type is not (18 or 2) || ++attachmentCount <= 5).ToList();
             var next = new Dictionary<string, string>(state.Cursors);
             foreach (var group in batch.GroupBy(i => i.Source))
                 next[group.Key] = group.MaxBy(i => BigInteger.Parse(i.Message.Id))!.Message.Id;
-            var textInputs = batch.Where(i => !i.Message.Deleted && i.Message.Type == 1 && !string.IsNullOrWhiteSpace(i.Message.Text)
+            var textInputs = batch.Where(i => !i.Message.Deleted && i.Message.Type is 1 or 18 or 2 && !string.IsNullOrWhiteSpace(i.Message.Text)
                 && !i.Message.Text.StartsWith("[정리·전달]", StringComparison.Ordinal))
                 .Select(i => i with { Message = i.Message with { Text = i.Message.Text[..Math.Min(i.Message.Text.Length, 3000)] } }).ToList();
+            for (var i = 0; i < textInputs.Count; i++)
+                textInputs[i] = textInputs[i] with { Message = await ai.Chats.ReadAttachmentAsync(textInputs[i].Message, ct) };
             state.LastRun = now; Save(path, state);
             var digest = textInputs.Count == 0 ? new SummaryDigest([]) :
                 await ai.Summaries.GenerateAsync(settings, textInputs, state.History.TakeLast(80).ToList(), ct);
@@ -91,7 +110,7 @@ public sealed class SummaryForwarder(AiService ai, Func<ApiSendCommand, Cancella
             if (updates.Count == 0)
             {
                 state.Cursors = next; state.LastRun = now; Save(path, state);
-                Report(rule, "추가사항 없음 · 발송 생략"); return;
+                ReportStatus("추가사항 없음 · 발송 생략"); return;
             }
             var body = new StringBuilder("[정리·전달]\n");
             body.AppendLine(string.Join(", ", rule.Sources.Select(s => s.Title)));
@@ -129,7 +148,7 @@ public sealed class SummaryForwarder(AiService ai, Func<ApiSendCommand, Cancella
         foreach (var item in pending.Items) state.LatestFacts[FactKey(item)] = ContentHash(item.Text);
         state.Pending = null; state.LastRun = time.GetUtcNow();
         Save(path, state);
-        Report(rule, $"추가사항 {pending.Items.Count}건 전달 완료");
+        ReportStatus($"추가사항 {pending.Items.Count}건 전달 완료");
     }
     private static void Save(string path, State state)
     {

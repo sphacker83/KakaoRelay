@@ -11,7 +11,7 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
     public static LocalMessage? Candidate(IEnumerable<LocalMessage> messages, string watermark, string selfId, string trigger) =>
         Candidates(messages, watermark, selfId, trigger).FirstOrDefault();
     public static List<LocalMessage> Candidates(IEnumerable<LocalMessage> messages, string watermark, string selfId, string trigger) =>
-        messages.Where(m => BigInteger.Parse(m.Id) > BigInteger.Parse(watermark) && m.AuthorId != selfId && !m.Deleted && m.Type == 1 && MatchesTrigger(m.Text, trigger)).OrderBy(m => BigInteger.Parse(m.Id)).ToList();
+        messages.Where(m => BigInteger.Parse(m.Id) > BigInteger.Parse(watermark) && m.AuthorId != selfId && !m.Deleted && m.Type is 1 or 18 or 2 && MatchesTrigger(m.Text, trigger)).OrderBy(m => BigInteger.Parse(m.Id)).ToList();
     private static bool MatchesTrigger(string text, string trigger)
     {
         if (trigger.Length == 0) return true; // Immediate/context modes do not require a mention.
@@ -74,6 +74,17 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
         dailyReplies.RecordSent(room, day, identity);
     }
 
+    // Shared by ordinary polling and the control-room command router.
+    public async Task<AiResult> ReplyToAsync(LocalRoom room, LocalMessage candidate, BackgroundDelegations jobs, CancellationToken cancellation)
+    {
+        var result = await ai.GenerateAsync(new(room.Profile, room.Id, "reply", $"메시지 ID {candidate.Id}에만 답하라. 다른 호출은 별도로 처리된다. 호출 내용: {PromptJson.Serialize(candidate.Text)}") { TargetMessageId = candidate.Id }, cancellation,
+            new SessionProgress(s => StatusChanged?.Invoke($"{room.Title} · {s}")), deferImages: true, allowDelegation: true);
+        if (result.Delegation is not null) await jobs.StartAsync(room, candidate, result);
+        else await SendReplyAsync(room, candidate, result, cancellation);
+        StatusChanged?.Invoke($"{room.Title} · {result.Provider} 답변 전송 요청 처리 · 다음 호출 대기");
+        return result;
+    }
+
     public async Task RunAsync(LocalRoom room, string selfId, string trigger, CancellationToken cancellation)
     {
         if (!BigInteger.TryParse(selfId, out var self) || self <= 0) throw new ArgumentException("내 사용자 ID가 필요합니다.");
@@ -99,7 +110,9 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
                 var approved = new List<LocalMessage>();
                 foreach (var candidate in pending)
                 {
-                    var recent = context.Messages.Where(m => BigInteger.Parse(m.Id) <= BigInteger.Parse(candidate.Id)).TakeLast(20);
+                    var recent = context.Messages.Where(m => BigInteger.Parse(m.Id) <= BigInteger.Parse(candidate.Id)).TakeLast(20).ToList();
+                    for (var i = 0; i < recent.Count; i++)
+                        if (recent[i].Id == candidate.Id) recent[i] = await ai.Chats.ReadAttachmentAsync(recent[i], cancellation);
                     var needed = await ai.ReplyJudge.ShouldReplyAsync(settings, settings.ResolvePersona(room.Profile, room.Id).Persona, recent, cancellation,
                         new SessionProgress(s => StatusChanged?.Invoke($"{room.Title} · {s}")));
                     StatusChanged?.Invoke($"{room.Title} · 메시지 {candidate.Id} · {(needed ? "답변 필요" : "맥락상 답변 생략")}");
@@ -111,10 +124,7 @@ public sealed class AutoReplySession(AiService ai, Func<ApiSendCommand, Task<Tes
             {
             // Consume the trigger before generation; failures are not retried as new sends.
             StatusChanged?.Invoke($"{room.Title} 답변 생성 중 · 이번 묶음 {pending.Count}개 호출");
-            var result = await ai.GenerateAsync(new(room.Profile, room.Id, "reply", $"메시지 ID {candidate.Id}에만 답하라. 다른 호출은 별도로 처리된다. 호출 내용: {PromptJson.Serialize(candidate.Text)}") { TargetMessageId = candidate.Id }, cancellation, new SessionProgress(s => StatusChanged?.Invoke($"{room.Title} · {s}")), deferImages: true, allowDelegation: true);
-            if (result.Delegation is not null) await jobs.StartAsync(room, candidate, result);
-            else await SendReplyAsync(room, candidate, result, cancellation);
-            StatusChanged?.Invoke($"{room.Title} · {result.Provider} 답변 전송 요청 처리 · 다음 호출 대기");
+            await ReplyToAsync(room, candidate, jobs, cancellation);
 
             }
             watermark = context.Messages.LastOrDefault()?.Id ?? watermark;

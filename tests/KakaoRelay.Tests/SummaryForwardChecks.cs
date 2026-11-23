@@ -7,9 +7,12 @@ internal static class SummaryForwardChecks
     {
         public List<LocalRoom> Rooms = [new("test", "1", "원본", true), new("test", "2", "수신", true)];
         public List<LocalMessage> Messages = [];
+        public HashSet<string> FailedRooms = [];
+        public Task<LocalMessage> ReadAttachmentAsync(LocalMessage message, CancellationToken cancellation = default) =>
+            Task.FromResult(message.Type == 18 ? message with { Text = message.Text + "\n첨부 결정: 금요일 제출" } : message);
         public Task<List<LocalRoom>> RoomsAsync(CancellationToken cancellation = default) => Task.FromResult(Rooms.ToList());
         public Task<ChatContext> ReadAsync(string profile, string roomId, int limit, CancellationToken cancellation = default) =>
-            Task.FromResult(new ChatContext(Rooms.Single(r => r.Id == roomId), Messages.TakeLast(limit).ToList(), DateTimeOffset.UtcNow));
+            FailedRooms.Contains(roomId) ? Task.FromException<ChatContext>(new IOException("test room unavailable")) : Task.FromResult(new ChatContext(Rooms.Single(r => r.Id == roomId), Messages.TakeLast(limit).ToList(), DateTimeOffset.UtcNow));
     }
     private sealed class Runner : IAiRunner
     {
@@ -99,6 +102,38 @@ internal static class SummaryForwardChecks
         clock.Advance(); await forwarder.TickAsync();
         check(sent.Count == attempts + 2, "A source exceeding the 500-message read window fails without silently advancing or sending");
         var invalid = new SummaryForwardRule { Sources = [source], Destination = source };
+        reader.Messages.Clear(); rule.Id = Guid.NewGuid().ToString("N"); store.Save(settings);
+        await forwarder.TickAsync();
+        reader.Messages.Add(new("600", "human", "작성자", clock.Now, 18, "회의록.pdf", false));
+        Result("600", "첨부 결정: 금요일 제출");
+        var beforeFile = sent.Count;
+        clock.Advance(); await forwarder.TickAsync();
+        check(sent.Count == beforeFile + 1 && sent[^1].Message.Contains("금요일 제출"), "Summary monitoring extracts file contents and validates quotes against extracted text");
+        // A failing source must not block a healthy source or lose its saved cursor.
+        reader.Rooms.Add(new("test", "3", "오류방", true));
+        rule.Sources.Add(new("test", "3", "오류방"));
+        rule.Id = Guid.NewGuid().ToString("N"); store.Save(settings);
+        await forwarder.TickAsync();
+        reader.FailedRooms.Add("3");
+        Add("601", "일요일 변경"); Result("601", "일요일 변경");
+        var beforePartial = sent.Count;
+        string status = ""; forwarder.StatusChanged += value => status = value;
+        clock.Advance(); await forwarder.TickAsync();
+        check(sent.Count == beforePartial + 1 && status.Contains("오류방"), "A failed room is named while healthy room updates are delivered");
+        var partial = Directory.GetFiles(state, "*.json").Select(f => JsonSerializer.Deserialize<SummaryForwarder.State>(File.ReadAllText(f), new JsonSerializerOptions(JsonSerializerDefaults.Web))!).Single(s => s.SourceErrors.ContainsKey(AiSettings.RoomKey("test", "3")));
+        check(partial.Cursors[source.Key] == "601" && partial.Cursors[AiSettings.RoomKey("test", "3")] == "600", "Failed room cursor stays unchanged while healthy room advances");
+        reader.FailedRooms.Clear();
+        runner.Result = new([new("복구", "일요일 변경", [new(AiSettings.RoomKey("test", "3"), "601", "일요일 변경")])]);
+        clock.Advance(); await forwarder.TickAsync();
+        check(sent.Count == beforePartial + 2, "Recovered room resumes unread messages from its retained cursor");
+        rule.Id = Guid.NewGuid().ToString("N"); store.Save(settings);
+        reader.FailedRooms.Add("3"); await forwarder.TickAsync();
+        Add("602", "다음 주 확정"); Result("602", "다음 주 확정");
+        clock.Advance(); await forwarder.TickAsync();
+        check(sent.Count == beforePartial + 3, "A source unavailable at initial baseline does not block healthy source updates");
+        reader.FailedRooms.Clear(); runner.Result = new([]);
+        clock.Advance(); await forwarder.TickAsync();
+        check(sent.Count == beforePartial + 3, "First successful read of an unavailable source baselines without replaying history");
         try { invalid.Validate(); check(false, "Self forwarding"); }
         catch (ArgumentException) { check(true, "A forwarding rule cannot send summaries back to its own source room"); }
     }

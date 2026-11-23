@@ -24,12 +24,11 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     private readonly System.Windows.Threading.DispatcherTimer saveTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
     private bool generating;
     public Visibility AnswerWaitingVisibility => generating ? Visibility.Visible : Visibility.Collapsed;
-    private CancellationTokenSource? bots;
-    private Task botsTask = Task.CompletedTask;
-    internal Task WaitForBotsAsync() => Task.WhenAll(botsTask, ForwardPanel.DrainAsync());
-    private int activeBots;
+    private ReplyRuntime? runtime;
+    internal Task WaitForBotsAsync() => Task.WhenAll(runtime?.DrainAsync() ?? Task.CompletedTask, ForwardPanel.DrainAsync(), ControlPanel.DrainAsync());
+    private int activeBots => runtime?.Count ?? 0;
     public ObservableCollection<string> BotStatuses { get; } = [];
-    public bool BotsRunning => bots is not null;
+    public bool BotsRunning => activeBots > 0;
     public bool CanStartBots => service is not null && !BotsRunning && Idle;
     private readonly System.Diagnostics.Stopwatch elapsed = new();
     private readonly System.Windows.Threading.DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -111,6 +110,11 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
         PersonaImages.Initialize(() => EditingProfile!, Save, () => Settings);
         Detect(); Changed();
         ForwardPanel.Initialize(ai, () => Settings, SaveSettings, sender);
+        runtime = new(ai, sender);
+        runtime.Changed += () => Dispatcher.Invoke(() => { BotStatuses.Clear(); foreach(var status in runtime.Statuses) BotStatuses.Add(status); if(runtime.LastError.Length>0) Status=runtime.LastError; Changed(); });
+        ControlPanel.Initialize(ai, () => Settings, ExecuteCommandAsync,
+            () => BotBadge + "\n" + string.Join("\n", runtime.Statuses) + "\n" + string.Join("\n", Rooms.Select(r=>r.Title+" · "+r.Id)), sender,
+            room => runtime.StopAsync(room));
     }
     private void Changed() => PropertyChanged?.Invoke(this, new(string.Empty));
     internal bool SaveSettings() { var saved = Save(); Changed(); return saved; }
@@ -143,7 +147,31 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
         PersonaBindingsRevision++;
         Changed();
     }
-    private void Detect() { CliInfo = string.Join("\n", CliAiRunner.Status(Settings).Select(s => $"{s.Provider}: {s.Detail}")); Changed(); }
+    private CancellationTokenSource? catalogCancellation;
+    private async void Detect()
+    {
+        catalogCancellation?.Cancel();
+        using var cancellation = new CancellationTokenSource(); catalogCancellation = cancellation;
+        var settings = Settings;
+        CliInfo = string.Join("\n", CliAiRunner.Status(settings).Select(s => $"{s.Provider}: {s.Detail}")); Changed();
+        await Task.WhenAll(settings.Providers.Select(async provider =>
+        {
+            var snapshot = new AiProviderSettings { Id = provider.Id, Executable = provider.Executable };
+            provider.SetModelCatalog(null, "설치된 CLI에서 모델 조회 중…");
+            try
+            {
+                var result = await Task.Run(() => ModelCatalog.QueryAsync(snapshot, cancellation.Token));
+                if (cancellation.IsCancellationRequested || Settings != settings || provider.Executable != snapshot.Executable) return;
+                provider.SetModelCatalog(result, $"CLI 제공 {result.Models.Count}개 · {result.CheckedAt.ToLocalTime():HH:mm:ss}" + (result.LoginRequired ? " · CLI 로그인 필요" : " · 실행 권한은 실제 응답 시 확인"));
+            }
+            catch (Exception e)
+            {
+                if (!cancellation.IsCancellationRequested && Settings == settings && provider.Executable == snapshot.Executable)
+                    provider.SetModelCatalog(null, "목록 조회 실패 · " + e.Message);
+            }
+        }));
+        if (catalogCancellation == cancellation) catalogCancellation = null;
+    }
     private void Detect_Click(object sender, RoutedEventArgs e) => Detect();
     private async Task Work(Func<CancellationToken, Task> work)
     {
@@ -260,52 +288,53 @@ public partial class AiPanel : UserControl, INotifyPropertyChanged
     private void Compose_Click(object sender, RoutedEventArgs e) { if (CanCompose) ComposeRequested?.Invoke(answerRoom!, Answer); }
     private async void StartBot_Click(object sender, RoutedEventArgs e)
     {
-        if (!CanStartBots || !Save() || send is null) return;
-        ApplyRooms(Rooms.ToList());
-        var selected = BotRooms.SelectedItems.Cast<LocalRoom>().ToList();
-        if (selected.Count == 0) { Status = "자동 답장할 방을 선택하세요."; Changed(); return; }
-        if (!System.Numerics.BigInteger.TryParse(SelfId.Trim(), out var self) || self <= 0) { Status = "내 사용자 ID를 입력하세요."; Changed(); return; }
-        var selfId = SelfId.Trim(); var trigger = Trigger.Trim();
-        List<LocalRoom>? prepared = null;
-        await Work(async ct =>
-        {
-            Status = "자동답장 시작 전 · 선택한 방의 대화 읽기와 발송 창 확인 중"; Changed();
-            var result = await AutoReplyReadiness.PrepareAsync(service!.Chats, selected, ConversationCatalog.Scan, ct);
-            ct.ThrowIfCancellationRequested();
-            ApplyRooms(result.Rooms);
-            prepared = result.Selected;
+        if (!CanStartBots || !Save()) return;
+        await Work(async ct => {
+            var selected=BotRooms.SelectedItems.Cast<LocalRoom>().Where(r=>!ControlPanel.Owns(r)).ToList();
+            if(selected.Count==0)throw new InvalidOperationException("자동답장할 방을 선택하세요. 제어방은 제외됩니다.");
+            await runtime!.StartAsync(selected,ct); Status="자동답장 시작";
         });
-        if (prepared is null) return;
-        selected = prepared;
-        using var cancellation = new CancellationTokenSource(); bots = cancellation; activeBots = selected.Count;
-        Status = "자동 답장 시작 · 수동 분석도 사용할 수 있습니다.";
-        BotStatuses.Clear(); foreach (var room in selected) BotStatuses.Add($"{room.Title} · 시작 준비 중"); Changed();
-        async Task RunRoom(LocalRoom room, int index)
-        {
-            var ct = cancellation.Token;
-            var stage = $"{room.Title} · 시작 준비 중";
-            var stageTime = System.Diagnostics.Stopwatch.StartNew();
-            var roomTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            roomTimer.Tick += (_, _) => BotStatuses[index] = $"{stage} · {stageTime.Elapsed:mm\\:ss} 경과";
-            void SetStage(string message) { stage = message; stageTime.Restart(); BotStatuses[index] = message; }
-            roomTimer.Start();
-            async Task<TestSendReceipt> SendQueued(ApiSendCommand command)
-            {
-                SetStage($"{room.Title} · 전송 순서 대기");
-                ct.ThrowIfCancellationRequested();
-                return await send(command, ct);
-            }
-            var session = new AutoReplySession(service!, SendQueued);
-            session.StatusChanged += message => Dispatcher.Invoke(() => { SetStage(message); Changed(); });
-            try { await session.RunAsync(room, selfId, trigger, ct); }
-            catch (OperationCanceledException) { BotStatuses[index] = $"{room.Title} · 중지됨"; }
-            catch (Exception error) { BotStatuses[index] = $"{room.Title} · 실패로 중지: {error.Message}"; }
-            finally { roomTimer.Stop(); activeBots--; Changed(); }
-        }
-        try { botsTask = Task.WhenAll(selected.Select(RunRoom)); await botsTask; }
-        finally { bots = null; if (!Busy) Status = "자동 답장 종료 · 방별 결과를 확인하세요."; Changed(); }
     }
-    public void Stop() { roomTicker.Stop(); ForwardPanel.Stop(); saveTimer.Stop(); if (settingsLoaded) Save(); operation?.Cancel(); bots?.Cancel(); PersonaImages.Stop(); }
-    private void StopBots_Click(object sender, RoutedEventArgs e) => bots?.Cancel();
+    public event Action? RemoteSettingsChanged;
+    internal object RuntimeSnapshot() => new { autoReplyRunning = BotsRunning, activeRooms = activeBots,
+        rooms = runtime?.Statuses ?? [], lastError = runtime?.LastError ?? "", commandRoom = ControlPanel.RuntimeStatus };
+    internal async Task ResumeSelectedRepliesAsync()
+    {
+        try
+        {
+            var rooms = await service!.Chats.RoomsAsync(); ApplyRooms(rooms);
+            var selected=rooms.Where(r=>Settings.SelectedBotRooms.Contains(AiSettings.RoomKey(r.Profile,r.Id))&&!ControlPanel.Owns(r)).ToList();
+            await runtime!.StartAsync(selected); Status="저장된 자동답장 방 복원 완료"; Changed();
+        }
+        catch(Exception error){Status="자동답장 복원 실패: "+error.Message;Changed();}
+    }
+    private async Task<string> ExecuteCommandAsync(CommandPlan plan,CancellationToken ct)
+    {
+        if(Busy||PersonaImages.Busy)throw new InvalidOperationException("앱에서 다른 설정 작업 중입니다. 잠시 후 다시 요청하세요.");
+        if(plan.Revision!=CommandPolicy.Revision(Settings))throw new InvalidOperationException("설정이 바뀌었습니다. 다시 요청하세요.");
+        saveTimer.Stop();
+        if(plan.Command.Action=="reply")
+        {
+            if(plan.Command.Value=="켜기")await runtime!.StartAsync([plan.Room!],ct);
+            else await runtime!.StopAsync(plan.Room);
+        }
+        // Do not claim success before the runtime transition or durable save has succeeded.
+        try { service!.Settings.Save(plan.Next); }
+        catch (Exception error) { throw new InvalidOperationException((plan.Command.Action=="reply"?"자동답장 실행 상태는 변경됐지만 설정 저장 실패: ":"설정 저장 실패: ")+error.Message); }
+        var forwardChanged=System.Text.Json.JsonSerializer.Serialize(Settings.SummaryForwards)!=System.Text.Json.JsonSerializer.Serialize(plan.Next.SummaryForwards);
+        Settings=plan.Next;
+        editingProfile=Settings.Personas.FirstOrDefault(p=>p.Id==editingProfile?.Id)??Settings.Personas[0];
+        foreach(var profile in Settings.Personas)profile.Persona.PropertyChanged+=(_,_)=>{PersonaBindingsRevision++;QueueSave();Changed();};
+        PersonaBindingsRevision++; ApplyRooms(Rooms.ToList()); if(forwardChanged)ForwardPanel.ReloadSettings(); RemoteSettingsChanged?.Invoke();Changed();
+        if(plan.Command.Action=="knowledge-run")
+        {
+            if(service.AutomaticKnowledge.Busy)return plan.Description+" · 이미 진행 중입니다.";
+            await service.AutomaticKnowledge.TickAsync(Settings,true,ct);
+            return string.Join("\n",service.AutomaticKnowledge.SavedStatuses(Settings));
+        }
+        return "적용: "+plan.Description;
+    }
+    public void Stop() { catalogCancellation?.Cancel(); roomTicker.Stop(); ForwardPanel.Stop(); saveTimer.Stop(); if (settingsLoaded) Save(); operation?.Cancel(); _ = runtime?.StopAsync(); ControlPanel.Stop(); PersonaImages.Stop(); }
+    private async void StopBots_Click(object sender, RoutedEventArgs e) { if(runtime is not null) await runtime.StopAsync(); }
     private void Cancel_Click(object sender, RoutedEventArgs e) => operation?.Cancel();
 }

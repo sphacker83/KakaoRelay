@@ -28,6 +28,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEdit => !working && queuedSends == 0 && !shuttingDown;
     public void PrepareShutdown() { shuttingDown = true; ChatbotPanel.Stop(); KnowledgePanel.Stop(); ApiStatus = "작업 완료 후 종료 중"; RefreshAll(); }
     public Task WaitForBotsAsync() => ChatbotPanel.WaitForBotsAsync();
+    internal Task ResumeSelectedRepliesAsync() => ChatbotPanel.ResumeSelectedRepliesAsync();
+    internal Task<object> RuntimeSnapshotAsync() => Dispatcher.InvokeAsync(ChatbotPanel.RuntimeSnapshot).Task;
     public bool ShowSendResult => compose.Submitted || currentReceipt is not null;
     public bool ShowObserveCurrent => currentReceipt is { Status: "needs-review", EnterPosted: true };
     public bool CanSend => CanEdit && targetReady && selectedConversation?.Selectable == true && !string.IsNullOrWhiteSpace(messageBody);
@@ -98,6 +100,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ChatbotPanel.Initialize(ai, send);
         KnowledgePanel.Initialize(() => ChatbotPanel.Settings, ChatbotPanel.SaveSettings);
         KnowledgePanel.InitializeAutomation(ai);
+        ChatbotPanel.RemoteSettingsChanged += KnowledgePanel.ReloadSettings;
     }
     private void Refresh([CallerMemberName] string? property = null) => PropertyChanged?.Invoke(this, new(property));
     private void RefreshAll() => Refresh(string.Empty);

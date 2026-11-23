@@ -143,6 +143,8 @@ internal sealed class MemoryChatDb : IDisposable
 
 public sealed class LocalChatReader : IChatReader, IDisposable
 {
+    private readonly ReceivedAttachments attachments = new();
+    public Task<LocalMessage> ReadAttachmentAsync(LocalMessage message, CancellationToken cancellation = default) => attachments.ReadAsync(message, cancellation);
     private readonly SemaphoreSlim gate = new(1);
     private readonly Dictionary<string, byte[]> keys = [];
     private List<LocalRoom> rooms = [];
@@ -157,11 +159,12 @@ public sealed class LocalChatReader : IChatReader, IDisposable
             var list = Path.Combine(path, "chat_data", "chatListInfo.edb");
             if (!keys.ContainsKey(list)) continue;
             using var db = Open(list);
-            foreach (var row in db.Query("SELECT chatId,chatRoomTitle FROM chatRoomList"))
+            var direct = DirectExpression(db);
+            foreach (var row in db.Query("SELECT chatId,chatRoomTitle," + direct + " FROM chatRoomList"))
             {
                 if (!Regex.IsMatch(row[0], "\\A[0-9]+\\z")) continue;
                 var log = Path.Combine(path, "chat_data", $"chatLogs_{row[0]}.edb");
-                if (File.Exists(log)) found.Add(new(profile, row[0], string.IsNullOrWhiteSpace(row[1]) ? $"방 {row[0]}" : row[1], keys.ContainsKey(log)));
+                if (File.Exists(log)) found.Add(new(profile, row[0], string.IsNullOrWhiteSpace(row[1]) ? $"방 {row[0]}" : row[1], keys.ContainsKey(log)) { DirectMemberId = row[2].Length == 0 ? null : row[2] });
             }
         }
         rooms = found.OrderByDescending(r => r.Readable).ThenBy(r => r.Title).ToList();
@@ -183,8 +186,8 @@ public sealed class LocalChatReader : IChatReader, IDisposable
             foreach (var r in people.Query("SELECT userId,coalesce(nullif(friendNickName,''),nickName,'') FROM talkUser")) names[r[0]] = r[1];
         }
         using var db = Open(log);
-        var messages = db.Query($"SELECT logId,authorId,sendAt,type,message,coalesce(deleted,0) FROM chatLogs ORDER BY logId DESC LIMIT {limit}")
-            .Select(r => new LocalMessage(r[0], r[1], names.GetValueOrDefault(r[1], r[1]), DateTimeOffset.FromUnixTimeSeconds(long.Parse(r[2])), int.Parse(r[3]), r[4], r[5] != "0"))
+        var messages = db.Query($"SELECT logId,authorId,sendAt,type,message,coalesce(deleted,0),coalesce(attachement,'{{}}') FROM chatLogs ORDER BY logId DESC LIMIT {limit}")
+            .Select(r => new LocalMessage(r[0], r[1], names.GetValueOrDefault(r[1], r[1]), DateTimeOffset.FromUnixTimeSeconds(long.Parse(r[2])), int.Parse(r[3]), r[4], r[5] != "0") { AttachmentMetadata = r[6] })
             .Reverse().ToList();
         var readableRoom = room with { Readable = true };
         rooms[rooms.IndexOf(room)] = readableRoom;
@@ -195,6 +198,20 @@ public sealed class LocalChatReader : IChatReader, IDisposable
         await gate.WaitAsync(cancellation);
         try { return await Task.Run(action, cancellation); } finally { gate.Release(); }
     }
+    private static string DirectExpression(MemoryChatDb db)
+    {
+        var columns = db.Query("PRAGMA table_info(chatRoomList)").Select(r => r[1]).ToHashSet();
+        return new[] { "type", "activeMembersCount", "directChatMemberId", "linkId" }.All(columns.Contains)
+            ? "CASE WHEN type='DirectChat' AND activeMembersCount=2 AND coalesce(linkId,0)=0 AND directChatMemberId>0 THEN CAST(directChatMemberId AS TEXT) ELSE '' END"
+            : "''";
+    }
+    public Task<bool> IsDirectPeerAsync(LocalRoom room, string peer, CancellationToken cancellation = default) => Locked(() =>
+    {
+        var known=rooms.SingleOrDefault(r=>r.Profile==room.Profile&&r.Id==room.Id);
+        if(known is null)return false;
+        using var listing=Open(Path.Combine(root,known.Profile,"chat_data","chatListInfo.edb"));
+        return listing.Query($"SELECT {DirectExpression(listing)} FROM chatRoomList WHERE chatId={known.Id}").SingleOrDefault()?[0]==peer;
+    },cancellation);
     private MemoryChatDb Open(string path)
     {
         if (!keys.TryGetValue(path, out var key)) throw new ApiFailure(409, "key_unavailable", "카카오톡에서 해당 방을 연 뒤 로컬 대화방을 새로고침하세요.");

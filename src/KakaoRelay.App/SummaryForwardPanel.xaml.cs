@@ -8,7 +8,14 @@ namespace KakaoRelay.App;
 
 public partial class SummaryForwardPanel : UserControl, INotifyPropertyChanged
 {
-    public sealed class Choice { public required SummaryRoom Room { get; init; } public bool Selected { get; set; } }
+    public sealed class Choice : INotifyPropertyChanged
+    {
+        public required SummaryRoom Room { get; init; }
+        public string Availability { get; init; } = "";
+        private bool selected;
+        public bool Selected { get => selected; set { if (selected == value) return; selected = value; PropertyChanged?.Invoke(this, new(nameof(Selected))); } }
+        public event PropertyChangedEventHandler? PropertyChanged;
+    }
     private AiService? ai;
     private Func<AiSettings>? settings;
     private Func<bool>? save;
@@ -47,6 +54,12 @@ public partial class SummaryForwardPanel : UserControl, INotifyPropertyChanged
         timer.Start(); StartTick(); Changed();
     }
     private void Changed() => PropertyChanged?.Invoke(this, new(string.Empty));
+    public void ReloadSettings()
+    {
+        runCancellation?.Cancel();
+        var id=SelectedRule?.Id; Rules.Clear(); foreach(var rule in settings!().SummaryForwards)Rules.Add(rule);
+        SelectedRule=Rules.FirstOrDefault(r=>r.Id==id)??Rules.FirstOrDefault(); Changed();
+    }
     private void LoadDraft()
     {
         Enabled = selectedRule?.Enabled ?? false;
@@ -54,8 +67,6 @@ public partial class SummaryForwardPanel : UserControl, INotifyPropertyChanged
         foreach (var source in selectedRule?.Sources ?? [])
             if (!Sources.Any(c => c.Room.Key == source.Key)) Sources.Add(new() { Room = source });
         foreach (var choice in Sources) choice.Selected = selectedRule?.Sources.Any(r => r.Key == choice.Room.Key) == true;
-        // Rebind plain draft choices so checkbox state is refreshed when switching rules.
-        var choices = Sources.ToList(); Sources.Clear(); foreach (var choice in choices) Sources.Add(choice);
         var dest = selectedRule?.Destination;
         if (dest is not null && !Destinations.Any(d => d.Key == dest.Key)) Destinations.Add(dest);
         Destination = Destinations.FirstOrDefault(d => d.Key == dest?.Key);
@@ -69,6 +80,7 @@ public partial class SummaryForwardPanel : UserControl, INotifyPropertyChanged
         {
             var selected = Sources.Where(s => s.Selected).Select(s => s.Room.Key).ToHashSet();
             if (Sources.Count == 0 && selectedRule is not null) selected.UnionWith(selectedRule.Sources.Select(s => s.Key));
+            var retained = Sources.Where(s => s.Selected).Select(s => s.Room).ToList();
             var dest = Destination;
             var rooms = await ai!.Chats.RoomsAsync(lifetime.Token);
             var windows = await Task.Run(ConversationCatalog.Scan, lifetime.Token);
@@ -76,8 +88,10 @@ public partial class SummaryForwardPanel : UserControl, INotifyPropertyChanged
             foreach (var room in rooms.Where(r => r.Readable || selected.Contains(AiSettings.RoomKey(r.Profile, r.Id))))
             {
                 var source = new SummaryRoom(room.Profile, room.Id, room.Title);
-                Sources.Add(new() { Room = source, Selected = selected.Contains(source.Key) });
+                Sources.Add(new() { Room = source, Selected = selected.Contains(source.Key), Availability = room.Readable ? "" : "읽기 대기 · 카카오톡에서 방을 한 번 열어주세요" });
             }
+            foreach (var source in retained.Where(r => !Sources.Any(c => c.Room.Key == r.Key)))
+                Sources.Add(new() { Room = source, Selected = true, Availability = "목록에서 찾지 못함 · 감시 설정 유지" });
             foreach (var room in AutoReplyReadiness.OpenRooms(rooms, windows)) Destinations.Add(new(room.Profile, room.Id, room.Title));
             if (dest is not null && !Destinations.Any(d => d.Key == dest.Key)) Destinations.Add(dest);
             Destination = Destinations.FirstOrDefault(d => d.Key == dest?.Key);

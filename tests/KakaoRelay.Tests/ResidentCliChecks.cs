@@ -29,6 +29,9 @@ internal static class ResidentCliChecks
                         if (p.GetProperty("config").GetProperty("web_search").GetString() != "live") throw new Exception("Live web search not enabled");
                         if (p.GetProperty("config").GetProperty("mcp_servers.test.enabled").GetBoolean()
                             || p.GetProperty("config").GetProperty("plugins.plugin@fixture.enabled").GetBoolean()) throw new Exception("Integrations not disabled");
+                        var fileTools = p.GetProperty("config").GetProperty("features.shell_tool").GetBoolean();
+                        if (p.GetProperty("sandbox").GetString() != (fileTools ? "workspace-write" : "read-only")) throw new Exception("Sandbox does not match file tools");
+                        if (fileTools && OperatingSystem.IsWindows() && p.GetProperty("config").GetProperty("windows.sandbox").GetString() != "unelevated") throw new Exception("Windows file sandbox missing");
                         sid = method.GetString() == "thread/start" ? Guid.NewGuid().ToString() : p.GetProperty("threadId").GetString()!;
                         await Emit(new { id, result = new { thread = new { id = sid } } }); continue;
                     case "turn/start": prompt = p.GetProperty("input")[0].GetProperty("text").GetString()!; break;

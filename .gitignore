@@ -41,3 +41,8 @@ TestResults/
 **/persona-images/
 ai-settings.json
 **/ai-sessions/
+**/attachments/
+**/command-room/
+auth.json
+auth.json.*
+.DS_Store

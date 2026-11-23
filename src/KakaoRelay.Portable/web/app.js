@@ -12,7 +12,12 @@ function collect() {
   document.querySelectorAll('[data-provider]').forEach(card => { const p = settings.providers.find(p => p.id === card.dataset.provider); card.querySelectorAll('[data-field]').forEach(el => p[el.dataset.field] = el.type === 'checkbox' ? el.checked : el.value); });
 }
 async function save() { collect(); await api('settings', { method: 'PUT', body: JSON.stringify(settings) }); status('설정을 저장했습니다.'); }
-async function detect() { const providers = await api('providers'); $('#cliStatus').textContent = providers.map(p => `${p.provider}: ${p.detail}`).join('\n'); }
+async function detect() {
+ $('#cliStatus').textContent='설치된 CLI에서 모델 목록 조회 중…';
+ const [providers,catalogs]=await Promise.all([api('providers'),api('models')]);
+ $('#cliStatus').textContent=providers.map(p=>`${p.provider}: ${p.detail}\n${catalogs[p.provider]?.error||('CLI 제공 '+catalogs[p.provider].catalog.models.length+'개'+(catalogs[p.provider].catalog.loginRequired?' · 로그인 필요':''))}`).join('\n');
+ document.querySelectorAll('[data-field="model"]').forEach(input=>{const id=input.closest('[data-provider]').dataset.provider;let list=document.getElementById('models-'+id);if(!list){list=document.createElement('datalist');list.id='models-'+id;input.setAttribute('list',list.id);input.after(list);}list.replaceChildren(...(catalogs[id]?.catalog?.models||[]).map(m=>new Option(m.label,m.id)));});
+}
 function busy(value) { document.querySelectorAll('button:not(#cancel),input,select,[data-persona],#question').forEach(el => el.disabled = value); $('#cancel').disabled = !value; }
 async function showMessages() {
   if (!$('#rooms').value) return;
@@ -37,17 +42,10 @@ $('#cancel').onclick = () => controller?.abort();
 $('#copy').onclick = () => navigator.clipboard.writeText($('#answer').value).then(() => status('응답을 복사했습니다.'), () => status('복사할 텍스트를 직접 선택해주세요.'));
 (async () => {
   settings = await api('settings'); document.querySelectorAll('[data-persona]').forEach(el => el.value = settings.persona[el.dataset.persona]); $('#provider').value = settings.provider; $('#limit').value = settings.contextMessages; $('#timeout').value = settings.timeoutSeconds;
-  const modelChoices = await api('models');
   for (const provider of settings.providers) {
     const card = document.createElement('div'); card.className = 'provider-card'; card.dataset.provider = provider.id;
     const heading = document.createElement('h3'); heading.textContent = provider.id.toUpperCase(); card.append(heading);
     for (const [field, caption] of [['enabled', '사용'], ['executable', '실행 파일 경로 · 비우면 자동 검색'], ['model', '모델 · 비우면 CLI 기본값'], ['effort', 'effort · default / low / medium / high …']]) { const label = document.createElement('label'); label.textContent = caption; const input = document.createElement('input'); input.dataset.field = field; input.type = field === 'enabled' ? 'checkbox' : 'text'; if (field === 'enabled') input.checked = provider[field]; else input.value = provider[field]; label.append(input); card.append(label); } $('#providerForms').append(card);
   }
-  document.querySelectorAll('[data-field="model"]').forEach(input => {
-    const id = input.closest('[data-provider]').dataset.provider;
-    const choices = document.createElement('datalist'); choices.id = 'models-' + id;
-    choices.replaceChildren(...modelChoices[id].filter(Boolean).map(m => new Option(m, m)));
-    input.setAttribute('list', choices.id); input.after(choices);
-  });
   await detect(); status('준비됨 · 대화 파일을 가져오세요.');
 })().catch(e => status(e.message));

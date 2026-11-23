@@ -52,6 +52,11 @@ public partial class AutoKnowledgePanel : UserControl, INotifyPropertyChanged
         timer.Start(); Changed(); _ = Run(false);
     }
     private void Changed() => PropertyChanged?.Invoke(this, new(string.Empty));
+    public void ReloadSettings()
+    {
+        var config=settings!().AutoKnowledge; Enabled=config.Enabled; AutoSave=config.AutoSave; IntervalMinutes=config.IntervalMinutes;
+        Rooms.Clear(); foreach(var room in config.Rooms)AddChoice(new(room.Profile,room.RoomId,room.Title,true),true); Changed();
+    }
     private void Log(string message)
     {
         statuses.Enqueue(message); while (statuses.Count > 8) statuses.Dequeue();

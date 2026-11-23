@@ -55,7 +55,8 @@ public partial class App : Application
             catch { Shutdown(2); }
             return;
         }
-        if (e.Args.Length > 0 && !(e.Args.Length == 2 && e.Args[0] == "--report")) { Shutdown(64); return; }
+        var resumeReplies = e.Args.SequenceEqual(new[] { "--resume-replies" });
+        if (e.Args.Length > 0 && !resumeReplies && !(e.Args.Length == 2 && e.Args[0] == "--report")) { Shutdown(64); return; }
         showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\KakaoRelay.ShowWindow");
         instanceGate = new Mutex(false, @"Local\KakaoRelay.MainWindow");
         try { ownsGate = instanceGate.WaitOne(0); } catch (AbandonedMutexException) { ownsGate = true; }
@@ -88,8 +89,9 @@ public partial class App : Application
             main.InitializeAi(ai, SendQueued);
             api = await RelayApi.StartAsync(RelayApi.DefaultConnectionPath, ConversationCatalog.Scan,
                 () => TestSender.ReadHistory(TestSender.DefaultLedger),
-                Send, ai);
+                  Send, ai, main.RuntimeSnapshotAsync);
             main.SetApiStatus("AI API 연결됨 · 로컬 게이트웨이 실행 중");
+            if (resumeReplies) await main.ResumeSelectedRepliesAsync();
         }
         catch { main.SetApiStatus("AI API 시작 실패 · 앱을 다시 실행하세요."); }
         finally { startingApi = false; }

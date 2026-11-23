@@ -148,6 +148,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Border BorderBrush="#D2DFE2" BorderThickness="1" CornerRadius="7" Padding="8" Margin="0,8,0,0">
+                    <StackPanel>
                     <Grid>
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="76" />
@@ -158,6 +159,9 @@
                       <ComboBox Grid.Column="1" IsEditable="True" ItemsSource="{Binding ModelChoices}" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="AI 모델" ToolTip="모델 · 비우면 CLI 기본값" Margin="0,0,6,0" />
                       <ComboBox Grid.Column="2" IsEditable="True" Text="{Binding Effort, UpdateSourceTrigger=PropertyChanged}" ItemsSource="{Binding DataContext.EffortChoices, RelativeSource={RelativeSource AncestorType=UserControl}}" AutomationProperties.Name="AI effort" Margin="0" />
                     </Grid>
+                    <TextBlock Text="{Binding ModelStatus}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    <TextBox Text="{Binding Executable, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="AI 실행 파일 경로" ToolTip="비우면 설치된 CLI 자동 탐색 · 경로 변경 후 모델 새로고침" Margin="0,6,0,0" />
+                    </StackPanel>
                   </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -175,7 +179,7 @@
               <TextBlock Grid.Column="2" Text="제한(초)" VerticalAlignment="Center" Margin="0,0,8,0" />
               <TextBox Grid.Column="3" Text="{Binding Settings.TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0" />
             </Grid>
-            <Button Content="CLI 설치 확인" Click="Detect_Click" HorizontalAlignment="Left" Padding="12,7" />
+            <Button Content="설치·모델 목록 새로고침" Click="Detect_Click" HorizontalAlignment="Left" Padding="12,7" />
             <TextBlock Text="{Binding CliInfo}" FontSize="11" Margin="0,8" />
           </StackPanel>
         </ScrollViewer>
@@ -227,6 +231,7 @@
       <TabItem Header="정리감시">
         <local:SummaryForwardPanel x:Name="ForwardPanel"/>
       </TabItem>
+      <TabItem Header="제어방"><local:CommandRoomPanel x:Name="ControlPanel"/></TabItem>
     </TabControl>
     <Border Grid.Row="2" Background="#EAF5F5" Padding="10" Margin="0,9,0,0" CornerRadius="6">
       <StackPanel>

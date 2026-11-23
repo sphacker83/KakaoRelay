@@ -50,7 +50,7 @@ internal static class AiChecks
         store.Save(settings);
         var persisted = new AiSettingsStore(Path.Combine(root, "ai-settings.json")).Load();
         check(persisted.SelfId == "self-test" && persisted.Trigger == "@테스트봇" && persisted.SelectedBotRooms.SequenceEqual(settings.SelectedBotRooms) && persisted.SelectedChatRoom == settings.SelectedChatRoom, "Bot identity, persona-derived trigger and selected rooms survive a new settings store");
-        check(File.Exists(Path.Combine(root, "ai-settings.json.bak")) && ModelCatalog.Choices("grok", "custom-model").Contains("custom-model"), "Settings backup and custom model choices are preserved");
+        check(File.Exists(Path.Combine(root, "ai-settings.json.bak")) && ModelCatalog.Choices([], "custom-model").Contains("custom-model"), "Settings backup and custom model choices are preserved");
         var runner = new FakeRunner(); var service = new AiService(reader, store, runner);
         var result = await service.GenerateAsync(new(room.Profile, room.Id));
         check(result.Provider == "grok" && runner.Calls.SequenceEqual(new[] { "codex", "grok" }) && result.Attempts.Count == 2, "Automatic provider fallback preserves Codex then Grok priority");

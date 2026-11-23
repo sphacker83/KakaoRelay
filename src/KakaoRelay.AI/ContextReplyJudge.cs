@@ -26,7 +26,7 @@ public sealed class ContextReplyJudge(IAiRunner runner)
         if (providers.Count == 0) throw new InvalidOperationException("맥락 판단에는 Codex 또는 Grok를 사용 설정해야 합니다.");
         async Task<bool> Decide(AiProviderSettings provider, CancellationToken ct)
         {
-            var answer = (await runner.RunAsync(provider, prompt, Math.Min(settings.TimeoutSeconds, 60), ct)).Trim();
+            var answer = (await runner.RunAsync(provider, prompt, Math.Min(settings.TimeoutSeconds, 60), ct, AgentAttachment.From(messages.TakeLast(20)))).Trim();
             return answer switch { "REPLY" => true, "SKIP" => false, _ => throw new InvalidOperationException($"{provider.Id} 판단 형식 오류") };
         }
             var selected = providers.FirstOrDefault(p => p.Id == preferred);

@@ -196,3 +196,7 @@ v0.6 Windows 앱은 `capabilities.recentMessages.supported=true`를 반환합니
 
 근거: [UI Automation TextPattern](https://learn.microsoft.com/en-us/dotnet/framework/ui-automation/ui-automation-textpattern-overview),
 [카카오 메시지 API](https://developers.kakao.com/docs/ko/kakaotalk-message/rest-api).
+
+## 실제 자동답장 상태 · GET /v1/ai/runtime
+
+Windows 앱에서 같은 Bearer 인증으로 조회합니다. `autoReplyRunning`, `activeRooms`, 방별 `rooms` 상태, `lastError`, `commandRoom` 상태를 반환합니다. `/v1/health`의 `ready`는 API 가동만 의미하며 자동답장 시작을 뜻하지 않습니다. 제어방 지정·권한 변경은 API에서 제공하지 않습니다.

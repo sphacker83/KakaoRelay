@@ -46,7 +46,15 @@ foreach (var (route, file, mime) in new[] { ("/", "index.html", "text/html; char
 app.MapGet("/api/settings", () => settings.Load());
 app.MapPut("/api/settings", (AiSettings s) => { settings.Save(s); return Results.Ok(); });
 app.MapGet("/api/providers", () => CliAiRunner.Status(settings.Load()));
-app.MapGet("/api/models", () => settings.Load().Providers.ToDictionary(p => p.Id, p => ModelCatalog.Choices(p.Id, p.Model)));
+app.MapGet("/api/models", async (CancellationToken ct) =>
+{
+    var results = await Task.WhenAll(settings.Load().Providers.Select(async p =>
+    {
+        try { var catalog = await ModelCatalog.QueryAsync(p, ct); return new { provider = p.Id, choices = ModelCatalog.Choices(catalog.Models, p.Model), catalog = (CliModelCatalog?)catalog, error = (string?)null }; }
+        catch (Exception e) when (!ct.IsCancellationRequested) { return new { provider = p.Id, choices = ModelCatalog.Choices([], p.Model), catalog = (CliModelCatalog?)null, error = (string?)e.Message }; }
+    }));
+    return results.ToDictionary(r => r.provider);
+});
 app.MapPost("/api/import", (ImportRequest r) => reader.Import(r.Name, r.Content));
 app.MapGet("/api/rooms", async (CancellationToken ct) => await reader.RoomsAsync(ct));
 app.MapGet("/api/messages", async (string roomId, int? limit, CancellationToken ct) => await reader.ReadAsync("import", roomId, limit ?? 100, ct));

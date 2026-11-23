@@ -45,7 +45,7 @@ internal static class CipherChecks
         wal[24] ^= 1;
         try { ChatCipher.Decrypt(original, wal, key); check(false, "bad WAL"); } catch (InvalidDataException) { check(true, "Corrupt WAL header is rejected"); }
         LocalMessage Msg(string id, string author, string text, int type = 1, bool deleted = false) => new(id, author, author, DateTimeOffset.Now, type, text, deleted);
-        var rows = new[] { Msg("8", "2", "@bot old"), Msg("10", "1", "@bot own"), Msg("11", "2", "@bot deleted", deleted: true), Msg("12", "2", "ordinary"), Msg("13", "2", "@bot attachment", type: 2), Msg("14", "2", "@bot question") };
+        var rows = new[] { Msg("8", "2", "@bot old"), Msg("10", "1", "@bot own"), Msg("11", "2", "@bot deleted", deleted: true), Msg("12", "2", "ordinary"), Msg("13", "2", "@bot attachment", type: 3), Msg("14", "2", "@bot question") };
         check(AutoReplySession.Candidate(rows, "9", "1", "@bot")?.Id == "14", "Auto reply excludes baseline, self, deleted, nontext and untriggered messages");
         check(AutoReplySession.Candidate(rows, "14", "1", "@bot") is null, "Auto reply watermark prevents repeated generation for the same trigger");
         var repeated = rows.Concat(new[] { Msg("16", "2", "@bot third"), Msg("15", "2", "@bot second") });

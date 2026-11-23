@@ -104,7 +104,7 @@ public sealed class RelayApi : IAsyncDisposable
     private RelayApi(WebApplication app, string discoveryPath, ApiConnection connection)
     { this.app = app; this.discoveryPath = discoveryPath; Connection = connection; }
 
-    public static async Task<RelayApi> StartAsync(string discoveryPath, Func<List<ConversationTarget>> rooms, Func<List<TestSendReceipt>> history, Func<ApiSendCommand, Task<TestSendReceipt>> send, AiService? ai = null)
+    public static async Task<RelayApi> StartAsync(string discoveryPath, Func<List<ConversationTarget>> rooms, Func<List<TestSendReceipt>> history, Func<ApiSendCommand, Task<TestSendReceipt>> send, AiService? ai = null, Func<Task<object>>? runtime = null)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var expectedAuth = Encoding.UTF8.GetBytes("Bearer " + token);
@@ -133,6 +133,7 @@ public sealed class RelayApi : IAsyncDisposable
             { context.Response.StatusCode = 500; await context.Response.WriteAsJsonAsync(new { code = "unknown_result", detail = "같은 requestId로 결과를 조회하세요. 새 ID로 자동 재전송하지 마세요." }); }
         });
         app.MapGet("/v1/health", () => Results.Json(new { status = "ready", version = "0.10.0", application = "KakaoRelay" }));
+        if (runtime is not null) app.MapGet("/v1/ai/runtime", async () => Results.Json(await runtime()));
         app.MapGet("/v1/capabilities", () => Results.Json(new
         {
             send = true, idempotency = "requestId", requiresOpenRoom = true, maxMessageCharacters = (int?)null,

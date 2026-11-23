@@ -11,6 +11,44 @@
     }
   ],
   "paths": {
+    "/v1/ai/runtime": {
+      "get": {
+        "operationId": "getAiRuntime",
+        "summary": "Windows 앱의 실제 자동답장 및 제어방 실행 상태",
+        "responses": {
+          "200": {
+            "description": "인증 필요. API health와 자동답장 가동 여부는 별개입니다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "autoReplyRunning": {
+                      "type": "boolean"
+                    },
+                    "activeRooms": {
+                      "type": "integer"
+                    },
+                    "rooms": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "commandRoom": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "operationId": "getHealth",

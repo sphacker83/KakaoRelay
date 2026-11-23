@@ -61,6 +61,7 @@ public static class ProviderStorage
         info.Environment["CODEX_SQLITE_HOME"] = Home("codex");
         if (provider == "codex")
         {
+            RefreshCodexLogin();
             info.ArgumentList.Add("-c");
             info.ArgumentList.Add("sqlite_home=" + JsonSerializer.Serialize(home));
         }
@@ -69,6 +70,31 @@ public static class ProviderStorage
             info.Environment["CLAUDE_CODE_PROJECT_DIR_NAME"] = ClaudeProject(info.WorkingDirectory);
             info.Environment["CLAUDE_CODE_TMPDIR"] = Path.Combine(home, "tmp");
             Directory.CreateDirectory(info.Environment["CLAUDE_CODE_TMPDIR"]!);
+        }
+    }
+    private static void RefreshCodexLogin()
+    {
+        lock (Sync)
+        {
+            var source = Path.Combine(LegacyHome("codex"), "auth.json");
+            var destination = Path.Combine(Home("codex"), "auth.json");
+            if (!File.Exists(source) || !File.Exists(destination) || Path.GetFullPath(source).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)) return;
+            try
+            {
+                var text = File.ReadAllText(source);
+                using var current = JsonDocument.Parse(text);
+                using var saved = JsonDocument.Parse(File.ReadAllText(destination));
+                var a = current.RootElement; var b = saved.RootElement;
+                if (!a.TryGetProperty("tokens", out var at) || !b.TryGetProperty("tokens", out var bt)
+                    || !at.TryGetProperty("account_id", out var aid) || !bt.TryGetProperty("account_id", out var bid)
+                    || string.IsNullOrWhiteSpace(aid.GetString()) || aid.GetString() != bid.GetString()) return;
+                if (!a.TryGetProperty("last_refresh", out var ar) || !b.TryGetProperty("last_refresh", out var br)
+                    || !DateTimeOffset.TryParse(ar.GetString(), out var newer) || !DateTimeOffset.TryParse(br.GetString(), out var older) || newer <= older) return;
+                var temp = destination + ".sync-" + Guid.NewGuid().ToString("N");
+                try { File.WriteAllText(temp, text); File.Move(temp, destination, true); }
+                finally { if (File.Exists(temp)) File.Delete(temp); }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { }
         }
     }
     public static string ConversationFolder(string provider, string identity)

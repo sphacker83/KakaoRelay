@@ -78,6 +78,7 @@ public partial class KnowledgePanel : UserControl, INotifyPropertyChanged
     public void Initialize(Func<AiSettings> getSettings, Func<bool> saveSettings)
     { settings = getSettings; save = saveSettings; Profile = Profiles.FirstOrDefault(); Changed(); }
     public void InitializeAutomation(AiService ai) => Automation.Initialize(ai, settings!, save!, () => profile?.Knowledge.VaultPath ?? "");
+    public void ReloadSettings() { Profile=Profiles.FirstOrDefault(p=>p.Id==profile?.Id)??Profiles.FirstOrDefault(); Automation.ReloadSettings(); Changed(); }
     private void Changed() => PropertyChanged?.Invoke(this, new(string.Empty));
     public void Stop() { stopping = true; operation?.Cancel(); Automation.Stop(); Changed(); }
     private void Cancel_Click(object sender, RoutedEventArgs e) => operation?.Cancel();

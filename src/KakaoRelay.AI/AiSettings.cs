@@ -13,14 +13,26 @@ public sealed class BotPersona : System.ComponentModel.INotifyPropertyChanged
     public string Style { get; set; } = "핵심부터 짧게 답하고, 불확실한 내용은 확인 질문을 한다. 과장하지 않는다.";
     public string Instructions { get; set; } = "대화에 없는 사실을 만들지 않는다. 민감한 정보는 답변에 불필요하게 반복하지 않는다.";
 }
-public sealed class AiProviderSettings
+public sealed class AiProviderSettings : System.ComponentModel.INotifyPropertyChanged
 {
+    private IReadOnlyList<CliModel> models = [];
+    private string model = "", executable = "", modelStatus = "모델 목록 확인 전";
+    private bool refreshingModels;
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     [System.Text.Json.Serialization.JsonIgnore]
-    public IReadOnlyList<string> ModelChoices => ModelCatalog.Choices(Id, Model);
+    public IReadOnlyList<string> ModelChoices => ModelCatalog.Choices(models, Model);
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ModelStatus => modelStatus + (Model.Length > 0 && !models.Any(m => m.Id == Model) ? " · 현재 선택은 목록 미확인" : "");
+    public void SetModelCatalog(CliModelCatalog? catalog, string status)
+    {
+        refreshingModels = true;
+        try { models = catalog?.Models ?? []; modelStatus = status; PropertyChanged?.Invoke(this, new(nameof(ModelChoices))); PropertyChanged?.Invoke(this, new(nameof(Model))); PropertyChanged?.Invoke(this, new(nameof(ModelStatus))); }
+        finally { refreshingModels = false; }
+    }
     public string Id { get; set; } = "codex";
     public bool Enabled { get; set; } = true;
-    public string Executable { get; set; } = "";
-    public string Model { get; set; } = "";
+    public string Executable { get => executable; set { if (executable == value) return; executable = value; SetModelCatalog(null, "실행 파일 변경 · 모델 목록을 새로고침하세요."); } }
+    public string Model { get => model; set { if (refreshingModels || value is null || model == value) return; model = value; PropertyChanged?.Invoke(this, new(nameof(Model))); PropertyChanged?.Invoke(this, new(nameof(ModelStatus))); } }
     public string Effort { get; set; } = "default";
 }
 public sealed class PersonaProfile
@@ -109,7 +121,7 @@ public sealed class AiSettings
         if (RoomPersonas.Any(binding => !Personas.Any(p => p.Id == binding.Value))) throw new ArgumentException("채팅방에 연결된 페르소나가 없습니다.");
         foreach (var p in Providers)
         {
-            if (p.Model is null || p.Executable is null || !Regex.IsMatch(p.Model, "\\A[a-zA-Z0-9._:/-]{0,150}\\z") || !Regex.IsMatch(p.Effort ?? "", "\\A(default|none|minimal|low|medium|high|xhigh|max|ultra|ultracode)\\z")) throw new ArgumentException("모델 또는 effort 값을 확인하세요.");
+            if (p.Model is null || p.Executable is null || (p.Model.Length > 0 && !ModelCatalog.ValidId(p.Model)) || !Regex.IsMatch(p.Effort ?? "", "\\A(default|none|minimal|low|medium|high|xhigh|max|ultra|ultracode)\\z")) throw new ArgumentException("모델 또는 effort 값을 확인하세요.");
         }
     }
     public AiSettings Copy() => JsonSerializer.Deserialize<AiSettings>(JsonSerializer.Serialize(this))!;

@@ -69,6 +69,7 @@ try
 {
     if (args.Contains("--summary-checks"))
     {
+        await AttachmentChecks.RunAsync(root, Check);
         await SummaryForwardChecks.RunAsync(root, Check);
         await AutoReplyChecks.RunAsync(root, Check);
         Console.WriteLine($"All {checks} summary and room checks passed.");
@@ -100,6 +101,12 @@ try
     {
         await ApiChecks.RunAsync(root, Check);
         Console.WriteLine($"All {checks} API checks passed.");
+        return 0;
+    }
+    if (args.Contains("--command-checks"))
+    {
+        await CommandRoomChecks.RunAsync(root, Check);
+        Console.WriteLine($"All {checks} command checks passed.");
         return 0;
     }
     var exposed = new DiagnosticReport { Status = "complete", Processes = [new(1, 1, "test")], Windows = [new() { Controls = [new() { ControlType = "Edit", ValueAvailable = true, ValueReadOnly = false, InvokeAvailable = true }] }] };
@@ -146,8 +153,10 @@ try
     await StructuredKnowledgeChecks.RunAsync(root, Check);
     await ReplyModeChecks.RunAsync(root, Check);
     await AutoReplyChecks.RunAsync(root, Check);
+    await AttachmentChecks.RunAsync(root, Check);
     await SummaryForwardChecks.RunAsync(root, Check);
     await DelegationChecks.RunAsync(root, Check);
+    await CommandRoomChecks.RunAsync(root, Check);
     CipherChecks.Run(Check);
     Console.WriteLine($"All {checks} checks passed.");
     return 0;
