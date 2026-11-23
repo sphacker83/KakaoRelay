@@ -80,6 +80,43 @@ pub fn import_login_path() {
 #[cfg(windows)]
 pub fn import_login_path() {}
 
+/// 자동답장이 도는 동안 디스플레이·시스템 잠자기를 막아 화면이 저절로 잠기지 않게 한다.
+/// 맥은 잠긴 화면에서 카카오톡에 입력할 수 없어 발송이 모두 멈추기 때문이다.
+/// `caffeinate -d -i -w <앱 PID>`를 쓰므로 앱이 비정상 종료해도 함께 끝난다. 직접 잠그는 것(⌃⌘Q)은 막지 않는다.
+#[cfg(target_os = "macos")]
+pub fn keep_awake(on: bool) {
+    use std::sync::Mutex;
+    static CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+    let mut child = CHILD.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(running) = child.as_mut()
+        && !matches!(running.try_wait(), Ok(None))
+    {
+        *child = None;
+    }
+    match (on, child.is_some()) {
+        (true, false) => {
+            *child = std::process::Command::new("/usr/bin/caffeinate")
+                .args(["-d", "-i", "-w", &std::process::id().to_string()])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .ok();
+        }
+        (false, true) => {
+            if let Some(mut running) = child.take() {
+                let _ = running.kill();
+                let _ = running.wait();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Windows 원본은 잠금 방지를 하지 않는다.
+#[cfg(windows)]
+pub fn keep_awake(_on: bool) {}
+
 /// 원본 `Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })`. 폴더·파일·URL 모두 기본 앱으로 연다.
 pub fn open(target: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]

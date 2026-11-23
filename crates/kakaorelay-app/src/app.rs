@@ -225,6 +225,8 @@ fn subscribe(app: &AppHandle, host: &Arc<RelayHost>) {
         let (app, weak) = (app.clone(), Arc::downgrade(host));
         host.runtime().on_changed(move || {
             if let Some(host) = weak.upgrade() {
+                // 사용자 결정(2026-11-23): 자동답장이 도는 동안 맥 화면이 저절로 잠기지 않게 한다.
+                crate::os::keep_awake(host.runtime().count() > 0);
                 emit(&app, "bots", crate::commands::ai::bot_snapshot(&host));
             }
         });
